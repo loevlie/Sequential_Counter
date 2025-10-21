@@ -22,7 +22,7 @@ import argparse
 from datetime import datetime
 
 from dataset import OmniCountDataset
-from model import PointPredictionHead, PointPredictionLoss
+from model_cross_attn import PointPredictionHead, PointPredictionLoss
 from utils import VisualMarker
 from transformers import CLIPVisionModel, CLIPProcessor
 

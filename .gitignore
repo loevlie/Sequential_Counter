@@ -28,12 +28,15 @@ env/
 # Training outputs
 outputs/
 sweep_outputs/
+sweep_vlm_outputs/
 test_run/
+test_vlm_run/
 logs/
 *.csv
 *.pt
 *.pth
 checkpoints/
+*_lora/
 
 # Data (don't commit large files)
 data/
@@ -59,4 +62,5 @@ Thumbs.db
 # Misc
 *.log
 sweep_configs.json
+sweep_vlm_configs.json
 sweep_results.csv

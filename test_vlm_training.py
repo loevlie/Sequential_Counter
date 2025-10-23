@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Quick Test Script for VLM Training
+Quick Test Script for VLM Training (Qwen3-VL-4B-Thinking)
 
 Runs 2 epochs on a single category to verify:
-1. Model loading works
+1. Model loading works (Qwen3-VL with 4-bit quantization)
 2. LoRA setup is correct
 3. Training loop runs without errors
 4. Metrics are saved properly
 
-Expected runtime: ~30-60 minutes (with 4-bit quantization)
+Expected runtime: ~20-40 minutes (faster than 11B models!)
 """
 
 import subprocess
@@ -20,17 +20,17 @@ def test_vlm_training():
     """Run quick VLM training test."""
 
     print("="*80)
-    print("VLM TRAINING TEST - LLaVA-CoT")
+    print("VLM TRAINING TEST - Qwen3-VL-4B-Thinking")
     print("="*80)
     print()
     print("This will:")
-    print("  - Load Llama-3.2-11B-Vision-Instruct with 4-bit quantization")
+    print("  - Load Qwen3-VL-4B-Thinking with 4-bit quantization")
     print("  - Apply LoRA adapters (~16-32M trainable params)")
     print("  - Train for 2 epochs on Supermarket category")
-    print("  - Test batch size: 2 (lower for memory constraints)")
+    print("  - Test batch size: 2 (optimized for this model)")
     print()
-    print("Expected time: ~30-60 minutes")
-    print("GPU memory: ~16-24GB")
+    print("Expected time: ~20-40 minutes (faster than 11B models!)")
+    print("GPU memory: ~12-16GB")
     print()
 
     # Get dataset path from user

@@ -2,8 +2,8 @@
 """
 Hyperparameter Sweep Configuration for VLM Training
 
-Generates configurations for LLaVA-CoT model hyperparameter sweep.
-Smaller grid than cross-attention due to longer training time.
+Generates configurations for Qwen3-VL-4B-Thinking model hyperparameter sweep.
+Optimized grid for 4B model (faster than 11B models).
 """
 
 import json
@@ -72,7 +72,7 @@ def get_training_command(config_id, data_root, configs=None):
         f"--output_dir sweep_vlm_outputs/config_{config_id:04d}",
         "--num_workers 4",
         "--load_in_4bit",
-        f"--model_name meta-llama/Llama-3.2-11B-Vision-Instruct"
+        f"--model_name Qwen/Qwen3-VL-4B-Thinking"
     ]
 
     return " ".join(cmd_parts)

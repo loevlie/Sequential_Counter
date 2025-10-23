@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=vlm_count_sweep
+#SBATCH --job-name=qwen_count_sweep
 #SBATCH --output=logs/sweep_vlm_%A_%a.out
 #SBATCH --error=logs/sweep_vlm_%A_%a.err
-#SBATCH --array=0-215%6          # 216 configs (3*3*2*2*3*2*2), run 6 at a time
-#SBATCH --time=24:00:00          # 24 hours per job (VLM training is slower)
+#SBATCH --array=0-215%8          # 216 configs (3*3*2*2*3*2*2), run 8 at a time
+#SBATCH --time=16:00:00          # 16 hours per job (4B model is faster!)
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=48G                # More memory for VLM
-#SBATCH --gres=gpu:1             # 1 GPU per job (A100 40GB+ recommended)
+#SBATCH --mem=32G                # Less memory needed for 4B model
+#SBATCH --gres=gpu:1             # 1 GPU per job (24GB+ recommended)
 #SBATCH --partition=gpu          # Adjust based on your cluster
 
 # Set up environment
@@ -19,7 +19,7 @@ echo "Start time: $(date)"
 # Load modules (adjust for your HPC)
 module purge
 module load python/3.10
-module load cuda/12.1  # Llama 3.2 needs CUDA 12+
+module load cuda/12.1  # Qwen3-VL works with CUDA 12+
 module load cudnn/8.9
 
 # Activate virtual environment (create it first if needed)

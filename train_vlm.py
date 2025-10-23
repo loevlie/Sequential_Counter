@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Training Script for Sequential Counting with VLM (LLaVA-CoT)
+Training Script for Sequential Counting with VLM (Qwen3-VL)
 
-Uses Llama-3.2V-11B-cot with LoRA fine-tuning for efficient training.
+Uses Qwen3-VL-4B-Thinking with LoRA fine-tuning for efficient training.
 Implements random prefix training strategy with visual marking.
 
 Features:
@@ -28,7 +28,7 @@ from datetime import datetime
 from PIL import Image
 
 from dataset import OmniCountDataset
-from model_vlm import LLaVACoTCountingModel, create_target_text
+from model_vlm import VLMCountingModel, create_target_text
 from utils import VisualMarker
 
 
@@ -343,7 +343,7 @@ def main():
 
     # Model
     parser.add_argument('--model_name', type=str,
-                       default='meta-llama/Llama-3.2-11B-Vision-Instruct',
+                       default='Qwen/Qwen3-VL-4B-Thinking',
                        help='Base VLM model name')
     parser.add_argument('--lora_r', type=int, default=16,
                        help='LoRA rank')
@@ -436,7 +436,7 @@ def main():
 
     # Create model
     print("Loading VLM model...")
-    model = LLaVACoTCountingModel(
+    model = VLMCountingModel(
         model_name=args.model_name,
         use_lora=True,
         lora_r=args.lora_r,

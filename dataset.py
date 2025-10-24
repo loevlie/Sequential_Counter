@@ -147,36 +147,49 @@ class OmniCountDataset(Dataset):
 
     def __getitem__(self, idx):
         """Returns: (image, sorted_points, metadata)"""
-        example = self.examples[idx]
+        # Try to load the sample, if it fails (e.g., filename too long), try next sample
+        max_retries = 10
+        for attempt in range(max_retries):
+            try:
+                example = self.examples[idx]
 
-        # Load image
-        image = Image.open(example['image_path']).convert('RGB')
+                # Load image
+                image = Image.open(example['image_path']).convert('RGB')
 
-        # Resize if needed
-        if self.image_size is not None:
-            scale_x = self.image_size[0] / example['image_width']
-            scale_y = self.image_size[1] / example['image_height']
-            image = image.resize(self.image_size, Image.LANCZOS)
-            points = [(x * scale_x, y * scale_y) for x, y in example['points']]
-        else:
-            points = example['points']
+                # Resize if needed
+                if self.image_size is not None:
+                    scale_x = self.image_size[0] / example['image_width']
+                    scale_y = self.image_size[1] / example['image_height']
+                    image = image.resize(self.image_size, Image.LANCZOS)
+                    points = [(x * scale_x, y * scale_y) for x, y in example['points']]
+                else:
+                    points = example['points']
 
-        # Apply spatial sorting
-        sorter = SpatialSorter()
+                # Apply spatial sorting
+                sorter = SpatialSorter()
 
-        if self.spatial_order == 'reading_order':
-            sorted_points = sorter.reading_order(points, row_height=50)
-        elif self.spatial_order == 'left_to_right':
-            sorted_points = sorter.left_to_right(points)
-        elif self.spatial_order == 'nearest_neighbor':
-            sorted_points = sorter.nearest_neighbor(points)
-        else:
-            sorted_points = points
+                if self.spatial_order == 'reading_order':
+                    sorted_points = sorter.reading_order(points, row_height=50)
+                elif self.spatial_order == 'left_to_right':
+                    sorted_points = sorter.left_to_right(points)
+                elif self.spatial_order == 'nearest_neighbor':
+                    sorted_points = sorter.nearest_neighbor(points)
+                else:
+                    sorted_points = points
 
-        metadata = {
-            'category': example['category'],
-            'num_objects': len(sorted_points),
-            'image_size': image.size
-        }
+                metadata = {
+                    'category': example['category'],
+                    'num_objects': len(sorted_points),
+                    'image_size': image.size
+                }
 
-        return image, sorted_points, metadata
+                return image, sorted_points, metadata
+
+            except OSError as e:
+                # Handle file path too long or other OS errors
+                if attempt == 0:
+                    print(f"\nWarning: Skipping sample {idx} due to error: {e}")
+                # Try next sample (wrap around if needed)
+                idx = (idx + 1) % len(self.examples)
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to load sample after {max_retries} attempts")

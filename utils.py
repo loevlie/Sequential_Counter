@@ -35,7 +35,11 @@ class VisualMarker:
         else:
             image = np.array(image)
 
-        if not points:
+        # Handle both list and numpy array points
+        if isinstance(points, np.ndarray):
+            if points.size == 0:
+                return image
+        elif not points:
             return image
 
         if self.strategy == 'heatmap':

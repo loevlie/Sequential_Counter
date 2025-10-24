@@ -1,0 +1,55 @@
+{
+  "os": "Linux-6.8.0-85-generic-x86_64-with-glibc2.35",
+  "python": "CPython 3.10.12",
+  "startedAt": "2025-10-24T16:59:19.117226Z",
+  "args": [
+    "--data_root",
+    "/media/M2SSD/OmniCount-191/OmniCount-191",
+    "--categories",
+    "Supermarket",
+    "--batch_size",
+    "2",
+    "--epochs",
+    "10",
+    "--load_in_4bit",
+    "--wandb_project",
+    "sequential-counting",
+    "--wandb_run_name",
+    "vlm-regression-supermarket"
+  ],
+  "program": "/home/denny-loevlie/Jivko/Sequential_Counter/train_vlm_regression.py",
+  "codePath": "train_vlm_regression.py",
+  "codePathLocal": "train_vlm_regression.py",
+  "git": {
+    "remote": "git@github.com:loevlie/Sequential_Counter.git",
+    "commit": "180b15078e6b4fb6bcaaec8ea10c39bbd92e0a3e"
+  },
+  "email": "loevliedenny@gmail.com",
+  "root": "/home/denny-loevlie/Jivko/Sequential_Counter",
+  "host": "dennyloevlie-X670-AORUS-ELITE-AX",
+  "executable": "/home/denny-loevlie/Jivko/Sequential_Counter/venv/bin/python",
+  "cpu_count": 16,
+  "cpu_count_logical": 32,
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "982820896768",
+      "used": "868172984320"
+    }
+  },
+  "memory": {
+    "total": "66516267008"
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4090",
+      "memoryTotal": "25757220864",
+      "cudaCores": 16384,
+      "architecture": "Ada",
+      "uuid": "GPU-77e05937-8a4c-564c-1b91-6ca5ef0387d4"
+    }
+  ],
+  "cudaVersion": "12.6",
+  "writerId": "dqr9mbwwkmqhfc0xagaugb2xd95l95rl"
+}

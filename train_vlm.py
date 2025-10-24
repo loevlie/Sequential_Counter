@@ -78,6 +78,7 @@ class RandomPrefixTrainer:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.device = device
+        self.epochs = epochs
         self.max_new_tokens = max_new_tokens
 
         # Optimizer (only LoRA parameters are trainable)
@@ -88,8 +89,7 @@ class RandomPrefixTrainer:
             self.optimizer,
             mode='min',
             factor=lr_scheduler_factor,
-            patience=lr_scheduler_patience,
-            verbose=True
+            patience=lr_scheduler_patience
         )
 
         # Early stopping
@@ -97,9 +97,8 @@ class RandomPrefixTrainer:
 
         # Visual marker
         self.marker = VisualMarker(
-            marker_type='heatmap',
-            alpha=marking_alpha,
-            radius=10
+            strategy='heatmap',
+            alpha=marking_alpha
         )
 
         # Metrics tracking

@@ -99,7 +99,7 @@ class VLMCountingModel(nn.Module):
 
         self.model.train()
 
-    def create_prompt(self, num_marked: int) -> str:
+    def create_prompt(self, num_marked: int) -> List[Dict]:
         """
         Create prompt for the VLM to predict next object location.
 
@@ -109,7 +109,7 @@ class VLMCountingModel(nn.Module):
             num_marked: Number of objects already marked in the image
 
         Returns:
-            Formatted prompt string for Qwen3-VL
+            Messages list for Qwen3-VL processor
         """
         if num_marked == 0:
             marked_text = "No objects are marked yet."
@@ -118,10 +118,17 @@ class VLMCountingModel(nn.Module):
         else:
             marked_text = f"{num_marked} objects are already marked with red halos."
 
-        prompt = f"""<|im_start|>system
-You are a vision assistant that counts objects systematically.<|im_end|>
-<|im_start|>user
-This image shows objects to be counted. {marked_text}
+        # Return messages format for processor
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a vision assistant that counts objects systematically."
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": f"""This image shows objects to be counted. {marked_text}
 
 Task: Identify the next unmarked object and output its pixel coordinates.
 
@@ -131,10 +138,11 @@ Rules:
 3. Count objects systematically from top-to-bottom, left-to-right (reading order)
 4. Output format must be exactly: (x, y) or done - nothing else
 
-Think step by step, then provide your answer.<|im_end|>
-<|im_start|>assistant
-"""
-        return prompt
+Think step by step, then provide your answer."""}
+                ]
+            }
+        ]
+        return messages
 
     def parse_output(self, text: str, image_size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
         """
@@ -291,7 +299,7 @@ Think step by step, then provide your answer.<|im_end|>
     def forward_with_target(
         self,
         images: Union[Image.Image, List[Image.Image]],
-        prompts: Union[str, List[str]],
+        prompts: Union[List[Dict], List[List[Dict]]],
         target_texts: Union[str, List[str]]
     ) -> torch.Tensor:
         """
@@ -299,7 +307,7 @@ Think step by step, then provide your answer.<|im_end|>
 
         Args:
             images: PIL Image or list of PIL Images
-            prompts: Prompt string or list of prompts
+            prompts: Messages list or list of messages lists
             target_texts: Target answer strings (e.g., "(245, 367)" or "done")
 
         Returns:
@@ -311,16 +319,50 @@ Think step by step, then provide your answer.<|im_end|>
             prompts = [prompts]
             target_texts = [target_texts]
 
-        # Combine prompt + target for training
-        full_texts = [p + t for p, t in zip(prompts, target_texts)]
+        # Build conversation with assistant response for each sample
+        conversations = []
+        for messages, target in zip(prompts, target_texts):
+            # Add assistant response to messages
+            conv = messages + [{"role": "assistant", "content": target}]
+            conversations.append(conv)
 
-        # Process inputs (Qwen3-VL expects text and images separately)
+        # Apply chat template to get text with proper image tokens
+        texts = [
+            self.processor.apply_chat_template(conv, tokenize=False, add_generation_prompt=False)
+            for conv in conversations
+        ]
+
+        # Process inputs
         inputs = self.processor(
-            text=full_texts,
+            text=texts,
             images=images,
             return_tensors="pt",
             padding=True
         ).to(self.device)
+
+        # Create labels for loss computation
+        # Labels should be input_ids, but with -100 for tokens we don't want to compute loss on
+        labels = inputs["input_ids"].clone()
+
+        # For each sample, we need to mask the prompt tokens (only compute loss on assistant response)
+        # We'll tokenize just the prompts to find where the assistant response starts
+        for i, (messages, target) in enumerate(zip(prompts, target_texts)):
+            # Get prompt without assistant response
+            prompt_only = self.processor.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            prompt_tokens = self.processor(
+                text=prompt_only,
+                images=images[i],
+                return_tensors="pt"
+            )["input_ids"].to(self.device)
+
+            # Mask prompt tokens (set to -100 so they're ignored in loss)
+            prompt_len = prompt_tokens.shape[1]
+            labels[i, :prompt_len] = -100
+
+        # Add labels to inputs
+        inputs["labels"] = labels
 
         # Forward pass
         with torch.cuda.amp.autocast(dtype=torch.bfloat16):

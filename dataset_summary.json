@@ -1,0 +1,228 @@
+{
+  "total_images": 30226,
+  "total_annotations": 205489,
+  "categories": {
+    "Supermarket": {
+      "splits": {
+        "train": {
+          "num_images": 5249,
+          "num_annotations": 68590,
+          "unique_types": 53,
+          "avg_count": 13.067250904934273,
+          "median_count": 5.0
+        },
+        "valid": {
+          "num_images": 492,
+          "num_annotations": 7108,
+          "unique_types": 53,
+          "avg_count": 14.447154471544716,
+          "median_count": 6.0
+        },
+        "test": {
+          "num_images": 251,
+          "num_annotations": 3610,
+          "unique_types": 53,
+          "avg_count": 14.382470119521912,
+          "median_count": 5.0
+        }
+      },
+      "total_images": 5992,
+      "total_annotations": 79308
+    },
+    "Urban": {
+      "splits": {
+        "train": {
+          "num_images": 7000,
+          "num_annotations": 37279,
+          "unique_types": 13,
+          "avg_count": 5.325571428571428,
+          "median_count": 5.0
+        },
+        "valid": {
+          "num_images": 2000,
+          "num_annotations": 10889,
+          "unique_types": 13,
+          "avg_count": 5.4445,
+          "median_count": 5.0
+        },
+        "test": {
+          "num_images": 1000,
+          "num_annotations": 5352,
+          "unique_types": 13,
+          "avg_count": 5.352,
+          "median_count": 5.0
+        }
+      },
+      "total_images": 10000,
+      "total_annotations": 53520
+    },
+    "Fruits": {
+      "splits": {
+        "train": {
+          "num_images": 2424,
+          "num_annotations": 11444,
+          "unique_types": 8,
+          "avg_count": 4.721122112211221,
+          "median_count": 5.0
+        },
+        "valid": {
+          "num_images": 303,
+          "num_annotations": 1429,
+          "unique_types": 8,
+          "avg_count": 4.7161716171617165,
+          "median_count": 5.0
+        },
+        "test": {
+          "num_images": 303,
+          "num_annotations": 1429,
+          "unique_types": 8,
+          "avg_count": 4.7161716171617165,
+          "median_count": 5.0
+        }
+      },
+      "total_images": 3030,
+      "total_annotations": 14302
+    },
+    "Wild": {
+      "splits": {
+        "train": {
+          "num_images": 6675,
+          "num_annotations": 22912,
+          "unique_types": 4,
+          "avg_count": 3.43250936329588,
+          "median_count": 3.0
+        },
+        "valid": {
+          "num_images": 507,
+          "num_annotations": 1762,
+          "unique_types": 4,
+          "avg_count": 3.47534516765286,
+          "median_count": 3.0
+        },
+        "test": {
+          "num_images": 255,
+          "num_annotations": 862,
+          "unique_types": 4,
+          "avg_count": 3.380392156862745,
+          "median_count": 3.0
+        }
+      },
+      "total_images": 7437,
+      "total_annotations": 25536
+    },
+    "Satellite": {
+      "splits": {
+        "train": {
+          "num_images": 2597,
+          "num_annotations": 5267,
+          "unique_types": 24,
+          "avg_count": 2.0281093569503272,
+          "median_count": 1.0
+        },
+        "valid": {
+          "num_images": 252,
+          "num_annotations": 528,
+          "unique_types": 24,
+          "avg_count": 2.0952380952380953,
+          "median_count": 1.0
+        },
+        "test": {
+          "num_images": 127,
+          "num_annotations": 282,
+          "unique_types": 24,
+          "avg_count": 2.220472440944882,
+          "median_count": 1.0
+        }
+      },
+      "total_images": 2976,
+      "total_annotations": 6077
+    },
+    "Vegetables": {
+      "splits": {
+        "train": {
+          "num_images": 329,
+          "num_annotations": 2936,
+          "unique_types": 14,
+          "avg_count": 8.924012158054712,
+          "median_count": 9.0
+        },
+        "valid": {
+          "num_images": 2,
+          "num_annotations": 42,
+          "unique_types": 14,
+          "avg_count": 21.0,
+          "median_count": 21.0
+        }
+      },
+      "total_images": 331,
+      "total_annotations": 2978
+    },
+    "Birds": {
+      "splits": {
+        "train": {
+          "num_images": 25,
+          "num_annotations": 342,
+          "unique_types": 3,
+          "avg_count": 13.68,
+          "median_count": 13.0
+        },
+        "valid": {
+          "num_images": 5,
+          "num_annotations": 76,
+          "unique_types": 3,
+          "avg_count": 15.2,
+          "median_count": 15.0
+        },
+        "test": {
+          "num_images": 10,
+          "num_annotations": 165,
+          "unique_types": 3,
+          "avg_count": 16.5,
+          "median_count": 17.5
+        }
+      },
+      "total_images": 40,
+      "total_annotations": 583
+    },
+    "Pets": {
+      "splits": {
+        "train": {
+          "num_images": 33,
+          "num_annotations": 263,
+          "unique_types": 18,
+          "avg_count": 7.96969696969697,
+          "median_count": 7.0
+        },
+        "valid": {
+          "num_images": 15,
+          "num_annotations": 127,
+          "unique_types": 18,
+          "avg_count": 8.466666666666667,
+          "median_count": 10.0
+        },
+        "test": {
+          "num_images": 11,
+          "num_annotations": 106,
+          "unique_types": 18,
+          "avg_count": 9.636363636363637,
+          "median_count": 10.0
+        }
+      },
+      "total_images": 59,
+      "total_annotations": 496
+    },
+    "Household": {
+      "splits": {
+        "train": {
+          "num_images": 361,
+          "num_annotations": 22689,
+          "unique_types": 71,
+          "avg_count": 62.850415512465375,
+          "median_count": 35.0
+        }
+      },
+      "total_images": 361,
+      "total_annotations": 22689
+    }
+  }
+}

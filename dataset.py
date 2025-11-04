@@ -104,6 +104,9 @@ class OmniCountDataset(Dataset):
             with open(annotation_file, 'r') as f:
                 coco_data = json.load(f)
 
+            # Build category ID to name mapping
+            cat_id_to_name = {c['id']: c['name'] for c in coco_data['categories']}
+
             # Group annotations by image
             image_to_anns = {}
             for ann in coco_data['annotations']:
@@ -127,14 +130,25 @@ class OmniCountDataset(Dataset):
 
                 # Extract points from bbox centroids
                 points = []
+                object_categories = []
                 for ann in anns:
                     bbox = ann['bbox']  # [x, y, w, h]
                     cx = bbox[0] + bbox[2] / 2
                     cy = bbox[1] + bbox[3] / 2
                     points.append((cx, cy))
+                    object_categories.append(cat_id_to_name[ann['category_id']])
+
+                # Determine the primary object type (most common in the image)
+                # Usually all objects in an image are the same type
+                from collections import Counter
+                if object_categories:
+                    primary_object = Counter(object_categories).most_common(1)[0][0]
+                else:
+                    primary_object = 'objects'
 
                 self.examples.append({
-                    'category': category,
+                    'category': category,  # High-level category (Supermarket, Fruits, etc.)
+                    'object_type': primary_object,  # Specific object (eggs, apples, etc.)
                     'image_path': cat_path / img_info['file_name'],
                     'image_width': img_info['width'],
                     'image_height': img_info['height'],
@@ -178,7 +192,8 @@ class OmniCountDataset(Dataset):
                     sorted_points = points
 
                 metadata = {
-                    'category': example['category'],
+                    'category': example['category'],  # High-level: Supermarket, Fruits, etc.
+                    'object_type': example['object_type'],  # Specific: eggs, apples, etc.
                     'num_objects': len(sorted_points),
                     'image_size': image.size
                 }

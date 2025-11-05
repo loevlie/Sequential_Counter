@@ -1,298 +1,180 @@
-# Sequential Counting with Visual Marking
+# Sequential Counting with VLM Regression
 
-Training code for sequential object counting inspired by how children learn to count.
+Vision-Language Model (VLM) based approach for sequential object counting using direct coordinate regression with separate MLP heads.
 
-## Two Approaches Available
+## 🎯 Current Approach
 
-This repository provides two architectures for sequential counting:
+**Sensorimotor Agent Architecture** (inspired by autonomous driving):
+- **VLM**: Qwen3-VL-4B-Thinking with LoRA adapters (~33M trainable params)
+- **Special Tokens**: `<x>` and `<y>` tokens in prompt
+- **Separate MLP Heads**: Each coordinate has its own regression head
+- **Direct Regression**: Predicts normalized coordinates in [-1, 1] with tanh activation
+- **Sequential Marking**: Objects marked with numbered labels as they're counted
 
-### 🌟 **VLM Approach (Recommended)** - Qwen3-VL-4B-Thinking
-- **Model**: Qwen3-VL-4B-Thinking with LoRA fine-tuning
-- **Parameters**: 4B base + ~16-32M trainable (LoRA)
-- **Training**: Efficient with 4-bit quantization + LoRA
-- **Advantages**: Advanced spatial perception with 2D grounding, 15-20% better on spatial tasks, thinking/reasoning mode
-- **Files**: `train_vlm.py`, `model_vlm.py`, `test_vlm_training.py`
-
-### 📊 **Cross-Attention Baseline**
-- **Model**: CLIP ViT-B/32 (frozen) + custom point predictor
-- **Parameters**: ~890K trainable
-- **Training**: Faster, less memory-intensive
-- **Advantages**: Lightweight, quick iterations
-- **Files**: `train.py`, `model_cross_attn.py`, `test_training.py`
-
-Both use the same **random prefix training strategy** with **spatial ordering**.
-
----
-
-## Quick Start (VLM - Recommended)
-
-### 1. Setup Environment
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
-
-# Install dependencies (includes VLM support)
-pip install -r requirements.txt
-```
-
-### 2. Download Dataset
-
-Download OmniCount-191 from: https://github.com/mondalanindya/OmniCount
-
-```bash
-git clone https://github.com/mondalanindya/OmniCount.git
-cd OmniCount
-unzip OmniCount-191.zip
-```
-
-### 3. Test VLM Training
-
-```bash
-python test_vlm_training.py
-```
-
-This runs 2 epochs to verify:
-- Model loading works (Qwen3-VL-4B with 4-bit quantization)
-- LoRA setup is correct
-- Training loop runs without errors
-- Expected time: ~20-40 minutes (faster than 11B models!)
-- GPU memory: ~12-16GB
-
-### 4. Full VLM Training
-
-```bash
-python train_vlm.py \
-  --data_root /path/to/OmniCount-191 \
-  --categories Supermarket Fruits Urban \
-  --batch_size 4 \
-  --epochs 50 \
-  --lr 1e-5 \
-  --lora_r 16 \
-  --lora_alpha 32 \
-  --output_dir outputs/vlm_run_001
-```
-
----
-
-## HPC Hyperparameter Sweep
-
-### VLM Sweep (216 configurations)
-
-**Recommended for best performance**
-
-1. **Generate configs:**
-```bash
-python sweep_vlm.py --generate
-```
-
-2. **Edit SLURM script:**
-
-Edit `run_sweep_vlm.sbatch`:
-- Set `DATA_ROOT` to your OmniCount-191 path
-- Adjust partition/resources for your cluster
-- Requires 24GB+ GPU (works well on A100, A6000, RTX 4090)
-
-3. **Submit:**
-```bash
-mkdir -p logs
-sbatch run_sweep_vlm.sbatch  # 216 jobs, 8 parallel
-```
-
-4. **Analyze results:**
-```bash
-python analyze_sweep.py --sweep_dir sweep_vlm_outputs
-```
-
-### Cross-Attention Sweep (216 configurations)
-
-**Faster iterations, good baseline**
-
-1. **Generate configs:**
-```bash
-python sweep.py --generate
-```
-
-2. **Submit:**
-```bash
-sbatch run_sweep.sbatch  # 216 jobs, 10 parallel
-```
-
-3. **Analyze:**
-```bash
-python analyze_sweep.py --sweep_dir sweep_outputs
-```
-
----
-
-## Repository Structure
+## 📁 Repository Structure
 
 ```
-sequential-counting/
-├── README.md                    # This file
-├── HPC_DEPLOYMENT_GUIDE.md      # Detailed HPC deployment guide
-├── requirements.txt             # Dependencies (includes VLM support)
-│
-# Data & utilities
-├── dataset.py                   # OmniCount-191 loader (spatial ordering)
+.
+├── model_vlm_regression.py      # VLM + MLP regression model
+├── train_vlm_regression.py      # Training script with W&B logging
+├── dataset.py                   # OmniCount-191 dataset loader
 ├── utils.py                     # Visual marking utilities
-│
-# VLM approach (recommended)
-├── model_vlm.py                 # Qwen3-VL-4B-Thinking model with LoRA
-├── train_vlm.py                 # VLM training script
-├── test_vlm_training.py         # Quick VLM test (2 epochs)
-├── sweep_vlm.py                 # VLM hyperparameter sweep (216 configs)
-├── run_sweep_vlm.sbatch         # SLURM script for VLM sweep
-│
-# Cross-attention baseline
-├── model_cross_attn.py          # Point prediction network
-├── train.py                     # Cross-attention training
-├── test_training.py             # Quick baseline test
-├── sweep.py                     # Baseline hyperparameter sweep
-├── run_sweep.sbatch             # SLURM script for baseline
-│
-# Analysis
-└── analyze_sweep.py             # Find best model from sweep results
+├── requirements.txt             # Python dependencies
+├── run_hparam_search.sh         # SLURM hyperparameter search
+├── analyze_hparam_results.py    # Analyze sweep results
+├── check_hparam_status.sh       # Check SLURM job status
+└── docs/                        # Documentation
+    ├── HPC_DEPLOYMENT_GUIDE.md
+    ├── HPARAM_SEARCH_README.md
+    ├── VLM_REGRESSION_APPROACH.md
+    └── VLM_WORKFLOW.md
 ```
 
----
+## 🚀 Quick Start
 
-## Model Comparisons
+### Training Locally
 
-| Feature | VLM (Qwen3-VL-4B) | Cross-Attention |
-|---------|-------------------|-----------------|
-| **Parameters** | 4B (16-32M trainable) | 890K trainable |
-| **GPU Memory** | 12-16GB | 8-12GB |
-| **Training Time** | ~12-16h per sweep config | ~2-8h per sweep config |
-| **Inference** | ~150-300ms | ~50ms |
-| **Spatial Reasoning** | Excellent (2D grounding) | Good |
-| **Counting Accuracy** | Best (15-20% better) | Good |
-| **HPC Requirements** | 24GB+ GPU recommended | Any modern GPU |
-
----
-
-## Hyperparameter Grids
-
-### VLM Sweep (216 configs)
-
-| Parameter | Values |
-|-----------|--------|
-| Learning Rate | 5e-6, 1e-5, 2e-5 (3) |
-| LoRA Rank | 8, 16, 32 (3) |
-| LoRA Alpha | 16, 32 (2) |
-| Batch Size | 2, 4 (2) |
-| Marking Alpha | 0.2, 0.3, 0.5 (3) |
-| Spatial Order | reading_order, nearest_neighbor (2) |
-| Max Tokens | 64, 128 (2) |
-
-**Total**: 3×3×2×2×3×2×2 = 216 configs
-
-### Cross-Attention Sweep (216 configs)
-
-| Parameter | Values |
-|-----------|--------|
-| Learning Rate | 1e-5, 5e-5, 1e-4 (3) |
-| Hidden Dim | 128, 256, 512 (3) |
-| Batch Size | 8, 16 (2) |
-| Coord Weight | 1.0, 2.0 (2) |
-| Done Weight | 0.5, 1.0 (2) |
-| Marking Alpha | 0.2, 0.3, 0.5 (3) |
-| Spatial Order | reading_order, nearest_neighbor (2) |
-
-**Total**: 3×3×2×2×2×3×2 = 216 configs
-
----
-
-## Training Features
-
-✅ **Random Prefix Training**: Mark random k ∈ [0, N] objects, predict k+1 (unbiased)
-✅ **Spatial Ordering**: Reading order or nearest neighbor
-✅ **Early Stopping**: Stops when val loss doesn't improve (patience=7)
-✅ **LR Scheduler**: ReduceLROnPlateau (factor=0.5, patience=3)
-✅ **CSV Logging**: Saves metrics every epoch
-✅ **Checkpointing**: Best, latest, and per-epoch checkpoints
-✅ **Mixed Precision**: bfloat16 for VLM, float32 for baseline
-✅ **LoRA Fine-tuning**: Efficient training for VLM (4-bit quantization)
-
----
-
-## Output Structure
-
-### VLM Training
-```
-outputs/vlm_run_001/
-├── checkpoint_best_lora/          # Best LoRA adapters
-├── checkpoint_latest_lora/         # Latest LoRA adapters
-├── checkpoint_epoch_N_lora/        # Per-epoch LoRA adapters
-├── checkpoint_best.pt              # Training state (optimizer, etc.)
-├── checkpoint_latest.pt
-├── metrics.csv                     # Training metrics
-└── args.json                       # Hyperparameters
+**With FSC-147 dataset:**
+```bash
+python train_vlm_regression.py \
+    --dataset fsc147 \
+    --data_root /media/M2SSD/FSC147 \
+    --batch_size 4 \
+    --epochs 10 \
+    --lr 1e-3
 ```
 
-### Cross-Attention Training
-```
-outputs/run_001/
-├── checkpoint_best.pt              # Best model weights
-├── checkpoint_latest.pt            # Latest checkpoint
-├── checkpoint_epoch_N.pt           # Per-epoch checkpoints
-├── metrics.csv                     # Training metrics
-└── args.json                       # Hyperparameters
-```
-
----
-
-## Metrics Tracked
-
-Saved to `metrics.csv` every epoch:
-
-**VLM**: `epoch`, `train_loss`, `val_loss`, `learning_rate`, `timestamp`
-
-**Cross-Attention**: `epoch`, `train_total_loss`, `train_coord_loss`, `train_done_loss`, `train_consistency_loss`, `val_total_loss`, `val_coord_loss`, `val_done_loss`, `val_consistency_loss`, `learning_rate`, `timestamp`
-
----
-
-## Why VLM Approach?
-
-The VLM (Qwen3-VL-4B-Thinking) approach is recommended because:
-
-1. **Advanced Spatial Perception**: Native 2D grounding for object positioning and coordinates
-2. **15-20% Better Accuracy**: Superior performance on spatial reasoning tasks compared to standard VLMs
-3. **Thinking/Reasoning Mode**: Step-by-step reasoning for complex counting scenarios
-4. **Efficient Size**: 4B parameters means faster training and inference than 11B+ models
-5. **Extended Context**: 256K context window for processing large images and complex scenes
-6. **Recent & Optimized**: Released October 2025, specifically designed for spatial tasks
-
-The cross-attention baseline remains useful for:
-- Quick iterations and ablation studies
-- Resource-constrained environments
-- Comparison baseline
-
----
-
-## Citation
-
-If you use this code, please cite:
-
-```bibtex
-@article{omnicount2025,
-  title={OmniCount: Multi-label Object Counting with Semantic-Geometric Priors},
-  author={Mondal, Anindya and Nag, Sauradip and Zhu, Xiatian and Dutta, Anjan},
-  journal={AAAI},
-  year={2025}
-}
-
-@article{qwen3vl2025,
-  title={Qwen3 Technical Report},
-  author={Qwen Team},
-  journal={arXiv preprint arXiv:2505.09388},
-  year={2025}
-}
+**With OmniCount-191 dataset:**
+```bash
+python train_vlm_regression.py \
+    --dataset omnicount \
+    --data_root /path/to/OmniCount-191 \
+    --categories Supermarket \
+    --batch_size 4 \
+    --epochs 10 \
+    --lr 1e-3
 ```
 
----
+### Training on HPC with Hyperparameter Search
 
-## License
+```bash
+sbatch run_hparam_search.sh
+```
 
-MIT License - See LICENSE file for details
+Searches over:
+- Learning rates: [1e-3, 5e-4, 1e-4, 5e-5]
+- LoRA ranks: [8, 16, 32]
+- LoRA alphas: [16, 32]
+- MLP layers: [2, 3, 4]
+
+Total: 72 experiments running in parallel.
+
+## 🏗️ Model Architecture
+
+```
+Input Image + Text Prompt with <x> <y> tokens
+              ↓
+     Qwen3-VL-4B (LoRA)
+              ↓
+   Hidden States [batch, seq_len, 4096]
+              ↓
+   ┌──────────┴──────────┐
+   ↓                     ↓
+Extract <x>         Extract <y>
+features            features
+   ↓                     ↓
+MLP Head (3 layers)  MLP Head (3 layers)
+   ↓                     ↓
+Tanh → x ∈ [-1,1]   Tanh → y ∈ [-1,1]
+```
+
+## 📝 Example Prompt
+
+```
+System: You are a vision assistant that locates eggs in images systematically.
+
+User: [IMAGE]
+Count the eggs in this image. 5 objects are already marked with numbered labels.
+
+Task: Predict the (x, y) location of the next unmarked egg.
+
+Rules:
+1. Output x, y as normalized coordinates in [-1, 1]
+2. If all eggs are marked, output x=-1, y=-1
+3. Count systematically from top-to-bottom, left-to-right
+
+Next location: <x> <y>
+```
+
+## 🔑 Key Features
+
+### Dataset Integration
+- Extracts specific object types from COCO annotations (e.g., "eggs", "apples", "bottles")
+- Supports multiple OmniCount-191 categories (Supermarket, Fruits, etc.)
+- Spatial ordering strategies: reading order, left-to-right, nearest neighbor
+
+### Training Optimizations
+- **Separate Learning Rates**: MLP heads use 5x higher LR than VLM
+- **No DONE Training**: Only trains on spatial predictions to avoid collapse
+- **Limited Iterations**: 200 train / 50 val iterations per epoch for fast feedback
+- **Tanh Activation**: Constrains outputs to valid [-1, 1] range
+- **Gradient Monitoring**: Checks gradient flow on first iteration
+
+### Visualization
+- Side-by-side input/output comparisons
+- Numbered markers showing count order
+- Full prompt text in W&B captions
+- 16 validation images logged per epoch
+
+## 📊 Monitoring with W&B
+
+Tracks:
+- Training/validation loss (total, x, y components)
+- Learning rates for VLM and MLP heads
+- Sample predictions with ground truth
+- Full prompt text for debugging
+
+## 🔧 Hyperparameters
+
+**Default values:**
+- `--lr`: 1e-3 (VLM), 5e-3 (MLP heads)
+- `--batch_size`: 4
+- `--lora_r`: 16
+- `--lora_alpha`: 32
+- `--mlp_layers`: 3
+- `--epochs`: 10
+
+## 📚 Documentation
+
+- **[VLM Regression Approach](docs/VLM_REGRESSION_APPROACH.md)**: Detailed architecture explanation
+- **[HPC Deployment Guide](docs/HPC_DEPLOYMENT_GUIDE.md)**: SLURM setup and best practices
+- **[Hyperparameter Search](docs/HPARAM_SEARCH_README.md)**: Grid search configuration
+- **[VLM Workflow](docs/VLM_WORKFLOW.md)**: Training and evaluation workflow
+
+## 🛠️ Requirements
+
+```
+torch>=2.0.0,<2.5.0
+transformers>=4.40.0
+peft>=0.10.0
+qwen-vl-utils>=0.0.2
+accelerate>=0.27.0
+bitsandbytes>=0.43.0
+Pillow>=10.0.0
+numpy>=1.24.0,<2.0.0
+opencv-python>=4.8.0
+tqdm>=4.66.0
+wandb>=0.16.0
+matplotlib>=3.7.0,<3.9.0
+```
+
+## 🎓 References
+
+- **Sensorimotor Agent Architecture**: Inspired by autonomous driving VLM approaches
+- **OmniCount-191**: Multi-category counting dataset
+- **Qwen3-VL**: 4B parameter vision-language model
+- **LoRA**: Low-rank adaptation for efficient fine-tuning
+
+## 📝 License
+
+See LICENSE file for details.

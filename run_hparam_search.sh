@@ -22,7 +22,20 @@
 
 # Setup environment
 source ~/.bashrc
+
+# Load GCC 9.3.0 (required for numpy/scipy compilation)
+module load gcc/9.3.0
+
+# Load CUDA
 module load cuda/11.8  # Adjust based on your cluster
+
+# Set CUDA library path for bitsandbytes
+# Find the CUDA lib64 directory and add to LD_LIBRARY_PATH
+if [ -d "/opt/shared/cuda/11.8/lib64" ]; then
+    export LD_LIBRARY_PATH=/opt/shared/cuda/11.8/lib64:$LD_LIBRARY_PATH
+elif [ -d "$CUDA_HOME/lib64" ]; then
+    export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+fi
 
 # Activate your conda environment
 # Adjust the environment name based on your setup

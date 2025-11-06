@@ -1,11 +1,14 @@
-# Next Steps: Fixing 7-30 Pixel Error
+# Next Steps: Achieving 0-5 Pixel Accuracy
 
 ## Quick Summary
 
-After analyzing your 55-epoch training run, I found **two main problems** causing the 7-30 pixel error:
+After analyzing your 55-epoch training run with 7-30px errors, I've implemented an **aggressive three-stage loss function** designed for **sub-5-pixel precision**.
 
+### Previous Issues
 1. **Overfitting**: Best model was at epoch 10 (val_loss=0.606), but training continued to epoch 55 where val_loss=1.509
-2. **Distance threshold too lenient**: Current threshold (0.3 = 57 pixels) treats 20px errors as "close enough"
+2. **Distance threshold too lenient**: Threshold (0.3 = 57 pixels) treated 20px errors as "close enough"
+
+### New Target: **0-5 Pixel Accuracy** 🎯
 
 ## What I Changed
 

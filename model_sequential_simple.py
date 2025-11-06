@@ -81,7 +81,8 @@ class SimpleSequentialModel(nn.Module):
         lora_alpha: int = 32,
         lora_dropout: float = 0.05,
         load_in_4bit: bool = True,
-        device: str = "cuda"
+        device: str = "cuda",
+        use_nearest_neighbor_loss: bool = False  # NEW: Match prediction to nearest unmarked object
     ):
         super().__init__()
 
@@ -89,6 +90,7 @@ class SimpleSequentialModel(nn.Module):
         self.device = device
         self.use_lora = use_lora
         self.load_in_4bit = load_in_4bit
+        self.use_nearest_neighbor_loss = use_nearest_neighbor_loss
 
         # Load processor
         print(f"Loading processor from {model_name}...")
@@ -165,6 +167,41 @@ class SimpleSequentialModel(nn.Module):
         self.y_head = SimplePredictionHead(hidden_dim).to(device).to(torch.bfloat16)
         self.done_head = SimpleDoneHead(hidden_dim).to(device).to(torch.bfloat16)
 
+    def find_nearest_unmarked(
+        self,
+        pred_x: torch.Tensor,
+        pred_y: torch.Tensor,
+        all_objects: torch.Tensor,
+        marked_count: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Find nearest unmarked object to prediction.
+
+        Args:
+            pred_x: Predicted x coordinate (normalized)
+            pred_y: Predicted y coordinate (normalized)
+            all_objects: Tensor of shape [N, 2] with all object coords (normalized)
+            marked_count: Number of objects already marked
+
+        Returns:
+            Tuple of (nearest_x, nearest_y) in normalized coords
+        """
+        # Unmarked objects are those after marked_count
+        unmarked = all_objects[marked_count:]
+
+        if len(unmarked) == 0:
+            # No unmarked objects - return prediction as-is
+            return pred_x, pred_y
+
+        # Calculate L1 distances to all unmarked objects
+        distances = torch.abs(unmarked[:, 0] - pred_x) + torch.abs(unmarked[:, 1] - pred_y)
+
+        # Find nearest
+        nearest_idx = torch.argmin(distances)
+        nearest = unmarked[nearest_idx]
+
+        return nearest[0], nearest[1]
+
     def create_prompt(self, num_marked: int, category: str = "objects") -> List[Dict]:
         """Create prompt for the model."""
         if num_marked == 0:
@@ -206,7 +243,8 @@ Next prediction: <x> <y> <done>"""}
         category: str = "objects",
         gt_x: Optional[torch.Tensor] = None,
         gt_y: Optional[torch.Tensor] = None,
-        gt_done: Optional[torch.Tensor] = None
+        gt_done: Optional[torch.Tensor] = None,
+        all_objects: Optional[Union[torch.Tensor, List[torch.Tensor]]] = None  # NEW: For nearest-neighbor
     ) -> Dict[str, torch.Tensor]:
         """
         Forward pass - SIMPLIFIED version.
@@ -305,8 +343,33 @@ Next prediction: <x> <y> <done>"""}
             predictions['loss_done'] = loss_done
         elif gt_x is not None and gt_y is not None and gt_done is None:
             # Regression mode - AGGRESSIVE MULTI-STAGE LOSS for 0-5px accuracy
+
+            # OPTIONAL: Use nearest-neighbor matching instead of ordered prediction
+            if self.use_nearest_neighbor_loss and all_objects is not None:
+                # Match each prediction to nearest unmarked object
+                target_x_list = []
+                target_y_list = []
+                for i in range(batch_size):
+                    if isinstance(all_objects, list):
+                        objs = all_objects[i]  # [N, 2] tensor
+                    else:
+                        objs = all_objects  # Assume batch_size=1
+
+                    nearest_x, nearest_y = self.find_nearest_unmarked(
+                        pred_x[i], pred_y[i], objs, num_marked[i]
+                    )
+                    target_x_list.append(nearest_x)
+                    target_y_list.append(nearest_y)
+
+                target_x = torch.stack(target_x_list).to(pred_x.device)
+                target_y = torch.stack(target_y_list).to(pred_y.device)
+            else:
+                # Standard mode: predict specific next object in order
+                target_x = gt_x
+                target_y = gt_y
+
             # L1 distance in normalized space
-            dist = torch.abs(pred_x - gt_x) + torch.abs(pred_y - gt_y)
+            dist = torch.abs(pred_x - target_x) + torch.abs(pred_y - target_y)
 
             # Three-stage penalty for sub-5-pixel precision:
             # Stage 1: dist >= 0.1 (>19px) - Strong linear penalty to get closer
@@ -325,8 +388,8 @@ Next prediction: <x> <y> <done>"""}
             ).mean()
 
             # Also keep per-coordinate MSE for logging
-            loss_x = F.mse_loss(pred_x, gt_x)
-            loss_y = F.mse_loss(pred_y, gt_y)
+            loss_x = F.mse_loss(pred_x, target_x)
+            loss_y = F.mse_loss(pred_y, target_y)
 
             loss = loss_spatial
             predictions['loss'] = loss
@@ -335,7 +398,30 @@ Next prediction: <x> <y> <done>"""}
             predictions['loss_spatial'] = loss_spatial
         elif gt_x is not None and gt_y is not None and gt_done is not None:
             # Mixed mode - AGGRESSIVE MULTI-STAGE LOSS + weighted done
-            dist = torch.abs(pred_x - gt_x) + torch.abs(pred_y - gt_y)
+
+            # OPTIONAL: Use nearest-neighbor matching instead of ordered prediction
+            if self.use_nearest_neighbor_loss and all_objects is not None:
+                target_x_list = []
+                target_y_list = []
+                for i in range(batch_size):
+                    if isinstance(all_objects, list):
+                        objs = all_objects[i]
+                    else:
+                        objs = all_objects
+
+                    nearest_x, nearest_y = self.find_nearest_unmarked(
+                        pred_x[i], pred_y[i], objs, num_marked[i]
+                    )
+                    target_x_list.append(nearest_x)
+                    target_y_list.append(nearest_y)
+
+                target_x = torch.stack(target_x_list).to(pred_x.device)
+                target_y = torch.stack(target_y_list).to(pred_y.device)
+            else:
+                target_x = gt_x
+                target_y = gt_y
+
+            dist = torch.abs(pred_x - target_x) + torch.abs(pred_y - target_y)
             loss_spatial = torch.where(
                 dist < 0.05,
                 10.0 * dist ** 2,  # 10x stronger for sub-5px precision
@@ -346,8 +432,8 @@ Next prediction: <x> <y> <done>"""}
                 )
             ).mean()
 
-            loss_x = F.mse_loss(pred_x, gt_x)
-            loss_y = F.mse_loss(pred_y, gt_y)
+            loss_x = F.mse_loss(pred_x, target_x)
+            loss_y = F.mse_loss(pred_y, target_y)
             loss_done = F.binary_cross_entropy_with_logits(pred_done_logits, gt_done)
 
             loss = loss_spatial + 3.0 * loss_done  # 3x weight on done

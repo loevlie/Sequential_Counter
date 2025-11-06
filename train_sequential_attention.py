@@ -49,6 +49,7 @@ def prepare_batch(batch, marker, device, mode='mixed'):
     batch_gt_y = []
     batch_gt_done = []
     batch_categories = []
+    batch_all_objects = []  # NEW: Store all object coordinates for nearest-neighbor loss
 
     for img, points_list, meta in batch:
         # Convert tensor image to PIL if needed
@@ -90,6 +91,14 @@ def prepare_batch(batch, marker, device, mode='mixed'):
         batch_num_marked.append(k)
         batch_categories.append(object_type)
 
+        # NEW: Store all object coordinates (normalized) for nearest-neighbor loss
+        all_obj_coords = []
+        for pt in points_list:
+            x_norm, y_norm = normalize_coordinates(pt, img_pil.size)
+            all_obj_coords.append([x_norm, y_norm])
+        all_obj_tensor = torch.tensor(all_obj_coords, dtype=torch.bfloat16, device=device) if all_obj_coords else torch.empty((0, 2), dtype=torch.bfloat16, device=device)
+        batch_all_objects.append(all_obj_tensor)
+
         # Ground truth
         if mode == 'classification':
             done = 1.0 if k >= N else 0.0
@@ -114,29 +123,31 @@ def prepare_batch(batch, marker, device, mode='mixed'):
     # Convert to tensors
     if mode == 'classification':
         gt_done = torch.tensor(batch_gt_done, dtype=torch.bfloat16, device=device)
-        return batch_marked_images, batch_num_marked, batch_categories, None, None, gt_done
+        return batch_marked_images, batch_num_marked, batch_categories, None, None, gt_done, batch_all_objects
     elif mode == 'regression':
         gt_x = torch.tensor(batch_gt_x, dtype=torch.bfloat16, device=device)
         gt_y = torch.tensor(batch_gt_y, dtype=torch.bfloat16, device=device)
-        return batch_marked_images, batch_num_marked, batch_categories, gt_x, gt_y, None
+        return batch_marked_images, batch_num_marked, batch_categories, gt_x, gt_y, None, batch_all_objects
     else:
         gt_x = torch.tensor(batch_gt_x, dtype=torch.bfloat16, device=device)
         gt_y = torch.tensor(batch_gt_y, dtype=torch.bfloat16, device=device)
         gt_done = torch.tensor(batch_gt_done, dtype=torch.bfloat16, device=device)
-        return batch_marked_images, batch_num_marked, batch_categories, gt_x, gt_y, gt_done
+        return batch_marked_images, batch_num_marked, batch_categories, gt_x, gt_y, gt_done, batch_all_objects
 
 
-def train_epoch(model, train_loader, optimizer, marker, device, epoch, max_iters=None):
+def train_epoch_dual_task(model, train_loader, optimizer_coord, optimizer_done, marker, device, epoch, max_iters=None):
     """
-    Train for one epoch with alternating modes.
+    Train for one epoch with DUAL-TASK setup:
+    - Task 1: Coordinate prediction (separate backward pass)
+    - Task 2: Done signal (separate backward pass)
+    Both tasks trained every iteration.
     """
     model.train()
-    total_loss = 0
+    total_loss_coord = 0
+    total_loss_done = 0
     total_loss_x = 0
     total_loss_y = 0
-    total_loss_done = 0
-    num_batches_cls = 0
-    num_batches_reg = 0
+    num_batches = 0
 
     total_iters = len(train_loader) if max_iters is None else min(max_iters, len(train_loader))
     pbar = tqdm(train_loader, desc=f"Epoch {epoch} [Train]", total=total_iters)
@@ -145,107 +156,122 @@ def train_epoch(model, train_loader, optimizer, marker, device, epoch, max_iters
         if max_iters is not None and batch_idx >= max_iters:
             break
 
-        # Alternate between classification and regression
-        mode = 'classification' if batch_idx % 2 == 0 else 'regression'
+        # DUAL-TASK: Train both coordinate and done tasks each iteration
+        # We do this by running TWO forward/backward passes with different ground truths
 
-        # Prepare batch
-        images, num_marked, categories, gt_x, gt_y, gt_done = prepare_batch(
-            batch, marker, device, mode=mode
+        category = batch[0][2].get('object_type', 'objects') if len(batch) > 0 and isinstance(batch[0][2], dict) else 'objects'
+
+        # ========== TASK 1: COORDINATE PREDICTION ==========
+        images_coord, num_marked_coord, categories_coord, gt_x, gt_y, _, all_objects_coord = prepare_batch(
+            batch, marker, device, mode='regression'
         )
 
-        # Forward pass
-        optimizer.zero_grad()
+        optimizer_coord.zero_grad()
 
-        category = categories[0] if categories else "objects"
-
-        outputs = model.forward(
-            images=images,
-            num_marked=num_marked,
+        outputs_coord = model.forward(
+            images=images_coord,
+            num_marked=num_marked_coord,
             category=category,
             gt_x=gt_x,
             gt_y=gt_y,
-            gt_done=gt_done
+            gt_done=None,  # No done signal for coord task
+            all_objects=all_objects_coord
         )
 
-        loss = outputs['loss']
+        loss_coord = outputs_coord['loss']
+        loss_coord.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(model.model.parameters()) + list(model.x_head.parameters()) + list(model.y_head.parameters()),
+            max_norm=1.0
+        )
+        optimizer_coord.step()
 
-        # Backward pass
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        # ========== TASK 2: DONE SIGNAL ==========
+        images_done, num_marked_done, categories_done, _, _, gt_done, all_objects_done = prepare_batch(
+            batch, marker, device, mode='classification'
+        )
+
+        optimizer_done.zero_grad()
+
+        outputs_done = model.forward(
+            images=images_done,
+            num_marked=num_marked_done,
+            category=category,
+            gt_x=None,  # No coordinates for done task
+            gt_y=None,
+            gt_done=gt_done,
+            all_objects=all_objects_done
+        )
+
+        loss_done = outputs_done['loss']
+        loss_done.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(model.model.parameters()) + list(model.done_head.parameters()),
+            max_norm=1.0
+        )
+        optimizer_done.step()
 
         # Debug gradient flow for first epoch
-        if epoch == 0:
-            if batch_idx == 0:
-                done_head_grad = sum(p.grad.abs().sum().item() for p in model.done_head.parameters() if p.grad is not None)
-                print(f"\n[Gradient Check - Classification]")
-                print(f"  done_head: {done_head_grad:.4f}")
-            elif batch_idx == 1:
-                x_head_grad = sum(p.grad.abs().sum().item() for p in model.x_head.parameters() if p.grad is not None)
-                y_head_grad = sum(p.grad.abs().sum().item() for p in model.y_head.parameters() if p.grad is not None)
-                print(f"[Gradient Check - Regression]")
-                print(f"  x_head: {x_head_grad:.4f}")
-                print(f"  y_head: {y_head_grad:.4f}")
-
-        optimizer.step()
+        if epoch == 0 and batch_idx == 0:
+            x_head_grad = sum(p.grad.abs().sum().item() for p in model.x_head.parameters() if p.grad is not None)
+            y_head_grad = sum(p.grad.abs().sum().item() for p in model.y_head.parameters() if p.grad is not None)
+            done_head_grad = sum(p.grad.abs().sum().item() for p in model.done_head.parameters() if p.grad is not None)
+            print(f"\n[Gradient Check - Dual Task]")
+            print(f"  x_head: {x_head_grad:.4f}")
+            print(f"  y_head: {y_head_grad:.4f}")
+            print(f"  done_head: {done_head_grad:.4f}")
 
         # Track metrics
-        loss_val = loss.item()
-        total_loss += loss_val
+        loss_coord_val = loss_coord.item()
+        loss_done_val = loss_done.item()
+        loss_x_val = outputs_coord['loss_x'].item()
+        loss_y_val = outputs_coord['loss_y'].item()
 
-        if mode == 'classification':
-            loss_done_val = outputs['loss_done'].item()
-            total_loss_done += loss_done_val
-            num_batches_cls += 1
-            pbar.set_postfix({
-                'mode': 'cls',
-                'loss': f'{loss_val:.4f}',
-                'loss_done': f'{loss_done_val:.3f}'
-            })
-        else:
-            loss_x_val = outputs['loss_x'].item()
-            loss_y_val = outputs['loss_y'].item()
-            total_loss_x += loss_x_val
-            total_loss_y += loss_y_val
-            num_batches_reg += 1
-            pbar.set_postfix({
-                'mode': 'reg',
-                'loss': f'{loss_val:.4f}',
-                'loss_x': f'{loss_x_val:.3f}',
-                'loss_y': f'{loss_y_val:.3f}'
-            })
+        total_loss_coord += loss_coord_val
+        total_loss_done += loss_done_val
+        total_loss_x += loss_x_val
+        total_loss_y += loss_y_val
+        num_batches += 1
+
+        pbar.set_postfix({
+            'coord': f'{loss_coord_val:.4f}',
+            'done': f'{loss_done_val:.4f}',
+            'x': f'{loss_x_val:.3f}',
+            'y': f'{loss_y_val:.3f}'
+        })
 
         # Clear references
-        del outputs, loss, images, num_marked, categories
-        if gt_x is not None:
-            del gt_x, gt_y
-        if gt_done is not None:
-            del gt_done
+        del outputs_coord, outputs_done, loss_coord, loss_done
+        del images_coord, images_done, gt_x, gt_y, gt_done
+        del num_marked_coord, num_marked_done
 
         if batch_idx % 50 == 0:
             torch.cuda.empty_cache()
 
     # Compute averages
-    num_batches = num_batches_cls + num_batches_reg
-    avg_loss = total_loss / num_batches if num_batches > 0 else 0
-    avg_loss_x = total_loss_x / num_batches_reg if num_batches_reg > 0 else 0
-    avg_loss_y = total_loss_y / num_batches_reg if num_batches_reg > 0 else 0
-    avg_loss_done = total_loss_done / num_batches_cls if num_batches_cls > 0 else 0
+    avg_loss_coord = total_loss_coord / num_batches if num_batches > 0 else 0
+    avg_loss_done = total_loss_done / num_batches if num_batches > 0 else 0
+    avg_loss_x = total_loss_x / num_batches if num_batches > 0 else 0
+    avg_loss_y = total_loss_y / num_batches if num_batches > 0 else 0
 
     return {
-        'loss': avg_loss,
+        'loss_coord': avg_loss_coord,
+        'loss_done': avg_loss_done,
         'loss_x': avg_loss_x,
-        'loss_y': avg_loss_y,
-        'loss_done': avg_loss_done
+        'loss_y': avg_loss_y
     }
 
 
 def validate(model, val_loader, marker, device, epoch, log_images=True, num_images_to_log=16, max_iters=None):
-    """Validate on validation set."""
+    """
+    Validate on validation set with DUAL-TASK evaluation.
+    Both coord and done tasks evaluated separately.
+    """
     model.eval()
-    total_loss = 0
+    total_loss_coord = 0
+    total_loss_done = 0
     total_loss_x = 0
     total_loss_y = 0
-    total_loss_done = 0
     num_batches = 0
 
     images_logged = 0
@@ -260,58 +286,101 @@ def validate(model, val_loader, marker, device, epoch, log_images=True, num_imag
             if max_iters is not None and batch_idx >= max_iters:
                 break
 
-            # Prepare batch (mixed mode)
-            images, num_marked, categories, gt_x, gt_y, gt_done = prepare_batch(
-                batch, marker, device, mode='mixed'
+            category = batch[0][2].get('object_type', 'objects') if len(batch) > 0 and isinstance(batch[0][2], dict) else 'objects'
+
+            # Evaluate TASK 1: Coordinate prediction
+            images_coord, num_marked_coord, categories_coord, gt_x, gt_y, _, all_objects_coord = prepare_batch(
+                batch, marker, device, mode='regression'
             )
 
-            category = categories[0] if categories else "objects"
-
-            # Forward pass
-            outputs = model.forward(
-                images=images,
-                num_marked=num_marked,
+            outputs_coord = model.forward(
+                images=images_coord,
+                num_marked=num_marked_coord,
                 category=category,
                 gt_x=gt_x,
                 gt_y=gt_y,
-                gt_done=gt_done
+                gt_done=None,
+                all_objects=all_objects_coord
             )
 
-            loss_val = outputs['loss'].item()
-            loss_x_val = outputs['loss_x'].item()
-            loss_y_val = outputs['loss_y'].item()
-            loss_done_val = outputs['loss_done'].item()
+            # Evaluate TASK 2: Done signal
+            images_done, num_marked_done, categories_done, _, _, gt_done, all_objects_done = prepare_batch(
+                batch, marker, device, mode='classification'
+            )
 
-            total_loss += loss_val
+            outputs_done = model.forward(
+                images=images_done,
+                num_marked=num_marked_done,
+                category=category,
+                gt_x=None,
+                gt_y=None,
+                gt_done=gt_done,
+                all_objects=all_objects_done
+            )
+
+            loss_coord_val = outputs_coord['loss'].item()
+            loss_x_val = outputs_coord['loss_x'].item()
+            loss_y_val = outputs_coord['loss_y'].item()
+            loss_done_val = outputs_done['loss'].item()
+
+            total_loss_coord += loss_coord_val
             total_loss_x += loss_x_val
             total_loss_y += loss_y_val
             total_loss_done += loss_done_val
             num_batches += 1
 
             pbar.set_postfix({
-                'loss': f'{loss_val:.4f}',
-                'loss_x': f'{loss_x_val:.3f}',
-                'loss_y': f'{loss_y_val:.3f}',
-                'loss_done': f'{loss_done_val:.3f}'
+                'coord': f'{loss_coord_val:.4f}',
+                'done': f'{loss_done_val:.4f}',
+                'x': f'{loss_x_val:.3f}',
+                'y': f'{loss_y_val:.3f}'
             })
 
-            # Log images
+            # Log images (using coord task outputs for visualization)
             if log_images and images_logged < num_images_to_log:
                 import cv2
-                for i in range(len(images)):
+                for i in range(len(images_coord)):
                     if images_logged >= num_images_to_log:
                         break
 
-                    input_img = images[i]
-                    cat = categories[i] if i < len(categories) else "objects"
+                    input_img = images_coord[i]
+                    cat = categories_coord[i] if i < len(categories_coord) else "objects"
 
-                    pred_x = outputs['x'][i].item()
-                    pred_y = outputs['y'][i].item()
-                    pred_done = outputs['done'][i].item()
+                    pred_x = outputs_coord['x'][i].item()
+                    pred_y = outputs_coord['y'][i].item()
+                    pred_done = outputs_done['done'][i].item() if i < len(outputs_done['done']) else 0.0
 
                     true_x = gt_x[i].item()
                     true_y = gt_y[i].item()
-                    true_done = gt_done[i].item()
+
+                    # CRITICAL FIX: Compute true_done based on COORD image (num_marked_coord)
+                    # NOT from the separate done batch!
+                    if i < len(all_objects_coord):
+                        total_objects = len(all_objects_coord[i])
+                        marked_in_image = num_marked_coord[i]
+                        true_done = 1.0 if marked_in_image >= total_objects else 0.0
+                    else:
+                        true_done = 0.0
+
+                    # NEW: If using nearest-neighbor, compute actual target used for loss
+                    actual_target_x = true_x
+                    actual_target_y = true_y
+                    if model.use_nearest_neighbor_loss and all_objects_coord is not None and true_done < 0.5:
+                        # Recompute which object was actually matched
+                        if isinstance(all_objects_coord, list):
+                            objs = all_objects_coord[i]
+                        else:
+                            objs = all_objects_coord
+
+                        unmarked = objs[num_marked_coord[i]:]
+                        if len(unmarked) > 0:
+                            # Find nearest to prediction
+                            pred_x_tensor = torch.tensor(pred_x, dtype=torch.bfloat16, device=objs.device)
+                            pred_y_tensor = torch.tensor(pred_y, dtype=torch.bfloat16, device=objs.device)
+                            distances = torch.abs(unmarked[:, 0] - pred_x_tensor) + torch.abs(unmarked[:, 1] - pred_y_tensor)
+                            nearest_idx = torch.argmin(distances)
+                            actual_target_x = unmarked[nearest_idx, 0].item()
+                            actual_target_y = unmarked[nearest_idx, 1].item()
 
                     if isinstance(input_img, torch.Tensor):
                         input_img_np = input_img.permute(1, 2, 0).cpu().numpy()
@@ -323,12 +392,13 @@ def validate(model, val_loader, marker, device, epoch, log_images=True, num_imag
 
                     output_img_np = input_img_np.copy()
 
-                    # Draw GROUND TRUTH in GREEN
-                    if true_done < 0.5:  # Not done, so there IS a ground truth location
-                        gt_x_pixel = int(((true_x + 1) / 2) * W)
-                        gt_y_pixel = int(((true_y + 1) / 2) * H)
-                        cv2.circle(output_img_np, (gt_x_pixel, gt_y_pixel), 10, (0, 255, 0), 2)
-                        cv2.putText(output_img_np, "GT", (gt_x_pixel - 15, gt_y_pixel - 15),
+                    # Draw TARGET in GREEN (actual target used for loss)
+                    if true_done < 0.5:  # Not done, so there IS a target location
+                        target_x_pixel = int(((actual_target_x + 1) / 2) * W)
+                        target_y_pixel = int(((actual_target_y + 1) / 2) * H)
+                        cv2.circle(output_img_np, (target_x_pixel, target_y_pixel), 10, (0, 255, 0), 2)
+                        label = "NN" if model.use_nearest_neighbor_loss else "GT"
+                        cv2.putText(output_img_np, label, (target_x_pixel - 15, target_y_pixel - 15),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                     # Draw PREDICTION in RED
@@ -342,16 +412,16 @@ def validate(model, val_loader, marker, device, epoch, log_images=True, num_imag
                         cv2.putText(output_img_np, "PRED", (pred_x_pixel - 20, pred_y_pixel - 15),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
 
-                        # Draw line connecting prediction to ground truth if both exist
+                        # Draw line connecting prediction to target if both exist
                         if true_done < 0.5:
-                            gt_x_pixel = int(((true_x + 1) / 2) * W)
-                            gt_y_pixel = int(((true_y + 1) / 2) * H)
+                            target_x_pixel = int(((actual_target_x + 1) / 2) * W)
+                            target_y_pixel = int(((actual_target_y + 1) / 2) * H)
                             cv2.line(output_img_np, (pred_x_pixel, pred_y_pixel),
-                                   (gt_x_pixel, gt_y_pixel), (255, 255, 0), 1)
+                                   (target_x_pixel, target_y_pixel), (255, 255, 0), 1)
                             # Calculate pixel distance
-                            dist_pixels = np.sqrt((pred_x_pixel - gt_x_pixel)**2 + (pred_y_pixel - gt_y_pixel)**2)
+                            dist_pixels = np.sqrt((pred_x_pixel - target_x_pixel)**2 + (pred_y_pixel - target_y_pixel)**2)
                             cv2.putText(output_img_np, f"err={dist_pixels:.0f}px",
-                                       ((pred_x_pixel + gt_x_pixel)//2, (pred_y_pixel + gt_y_pixel)//2 - 10),
+                                       ((pred_x_pixel + target_x_pixel)//2, (pred_y_pixel + target_y_pixel)//2 - 10),
                                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
 
                     # Add done signals
@@ -362,7 +432,7 @@ def validate(model, val_loader, marker, device, epoch, log_images=True, num_imag
 
                     side_by_side = np.concatenate([input_img_np, output_img_np], axis=1)
 
-                    prompt_text = f"{cat} | Marked: {num_marked[i]}"
+                    prompt_text = f"{cat} | Marked: {num_marked_coord[i]}"
                     cv2.putText(side_by_side, prompt_text, (10, 30),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
@@ -371,30 +441,39 @@ def validate(model, val_loader, marker, device, epoch, log_images=True, num_imag
                     cv2.putText(side_by_side, "PREDICTION (w/ Sequential Attention)", (W + 10, H - 10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
+                    # Caption shows actual target used (nearest-neighbor if enabled)
+                    # Also show total objects to make done signal clear
+                    total_objs = len(all_objects_coord[i]) if i < len(all_objects_coord) else 0
+                    if model.use_nearest_neighbor_loss and true_done < 0.5:
+                        caption = f"{cat} | {num_marked_coord[i]}/{total_objs} marked | Pred:({pred_x:.2f},{pred_y:.2f},done={pred_done:.2f}) | NN:({actual_target_x:.2f},{actual_target_y:.2f},done={true_done:.0f})"
+                    else:
+                        caption = f"{cat} | {num_marked_coord[i]}/{total_objs} marked | Pred:({pred_x:.2f},{pred_y:.2f},done={pred_done:.2f}) | GT:({true_x:.2f},{true_y:.2f},done={true_done:.0f})"
+
                     wandb_images.append(wandb.Image(
                         side_by_side,
-                        caption=f"{cat} | Marked:{num_marked[i]} | Pred:({pred_x:.2f},{pred_y:.2f},done={pred_done:.2f}) | GT:({true_x:.2f},{true_y:.2f},done={true_done:.0f})"
+                        caption=caption
                     ))
 
                     images_logged += 1
 
-            del outputs, images, gt_x, gt_y, gt_done, num_marked, categories
+            del outputs_coord, outputs_done, images_coord, images_done, gt_x, gt_y, gt_done
+            del num_marked_coord, num_marked_done, categories_coord
 
             if batch_idx % 50 == 0:
                 torch.cuda.empty_cache()
 
-    avg_loss = total_loss / num_batches
-    avg_loss_x = total_loss_x / num_batches
-    avg_loss_y = total_loss_y / num_batches
-    avg_loss_done = total_loss_done / num_batches
+    avg_loss_coord = total_loss_coord / num_batches if num_batches > 0 else 0
+    avg_loss_x = total_loss_x / num_batches if num_batches > 0 else 0
+    avg_loss_y = total_loss_y / num_batches if num_batches > 0 else 0
+    avg_loss_done = total_loss_done / num_batches if num_batches > 0 else 0
 
     torch.cuda.empty_cache()
 
     return {
-        'loss': avg_loss,
+        'loss_coord': avg_loss_coord,
+        'loss_done': avg_loss_done,
         'loss_x': avg_loss_x,
         'loss_y': avg_loss_y,
-        'loss_done': avg_loss_done,
         'images': wandb_images
     }
 
@@ -422,6 +501,8 @@ def main():
                        help='Minimum objects per image')
     parser.add_argument('--max_objects', type=int, default=50,
                        help='Maximum objects per image')
+    parser.add_argument('--use_nearest_neighbor_loss', action='store_true',
+                       help='Match predictions to nearest unmarked object instead of ordered')
 
     # Training args
     parser.add_argument('--epochs', type=int, default=10)
@@ -499,44 +580,61 @@ def main():
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         load_in_4bit=args.load_in_4bit,
-        device=device
+        device=device,
+        use_nearest_neighbor_loss=args.use_nearest_neighbor_loss
     )
+
+    if args.use_nearest_neighbor_loss:
+        print("✨ Using NEAREST-NEIGHBOR loss: model can pick any unmarked object")
 
     # Create marker
     marker = VisualMarker(strategy='numbers', alpha=args.marking_alpha)
 
-    # Optimizer - simple version
-    optimizer = torch.optim.AdamW([
+    # DUAL-TASK SETUP: Separate optimizers for coordinate and done tasks
+    print("\n🔧 Setting up DUAL-TASK training:")
+    print("  Task 1: Coordinate prediction (x, y)")
+    print("  Task 2: Done signal (binary classification)")
+
+    # Optimizer 1: Coordinate prediction (VLM + x_head + y_head)
+    optimizer_coord = torch.optim.AdamW([
         {'params': model.model.parameters(), 'lr': args.lr},
         {'params': model.x_head.parameters(), 'lr': args.lr},
-        {'params': model.y_head.parameters(), 'lr': args.lr},
+        {'params': model.y_head.parameters(), 'lr': args.lr}
+    ])
+
+    # Optimizer 2: Done signal (VLM + done_head)
+    optimizer_done = torch.optim.AdamW([
+        {'params': model.model.parameters(), 'lr': args.lr},
         {'params': model.done_head.parameters(), 'lr': args.lr}
     ])
 
     print(f"\nStarting training for {args.epochs} epochs...")
     print(f"Output directory: {output_dir}")
-    print(f"Learning rate: {args.lr} (same for all modules)")
+    print(f"Learning rate: {args.lr}")
     print("Using SIMPLIFIED model (direct VLM features, no complex transformations)")
 
-    best_val_loss = float('inf')
-    patience_counter = 0
+    # Separate tracking for each task
+    best_val_loss_coord = float('inf')
+    best_val_loss_done = float('inf')
+    patience_counter_coord = 0
+    patience_counter_done = 0
     early_stop_patience = 5
-    print(f"Early stopping enabled with patience={early_stop_patience}")
+    print(f"Early stopping enabled with patience={early_stop_patience} (tracked separately per task)")
 
     for epoch in range(args.epochs):
-        # Train
-        train_metrics = train_epoch(
-            model, train_loader, optimizer, marker, device, epoch,
+        # Train with dual-task setup
+        train_metrics = train_epoch_dual_task(
+            model, train_loader, optimizer_coord, optimizer_done, marker, device, epoch,
             max_iters=args.max_train_iters
         )
 
         # Log training metrics
         wandb.log({
             "epoch": epoch,
-            "train/loss": train_metrics['loss'],
+            "train/loss_coord": train_metrics['loss_coord'],
+            "train/loss_done": train_metrics['loss_done'],
             "train/loss_x": train_metrics['loss_x'],
-            "train/loss_y": train_metrics['loss_y'],
-            "train/loss_done": train_metrics['loss_done']
+            "train/loss_y": train_metrics['loss_y']
         }, step=epoch)
 
         # Validate
@@ -548,10 +646,10 @@ def main():
 
         # Log validation metrics
         wandb.log({
-            "val/loss": val_metrics['loss'],
+            "val/loss_coord": val_metrics['loss_coord'],
+            "val/loss_done": val_metrics['loss_done'],
             "val/loss_x": val_metrics['loss_x'],
-            "val/loss_y": val_metrics['loss_y'],
-            "val/loss_done": val_metrics['loss_done']
+            "val/loss_y": val_metrics['loss_y']
         }, step=epoch)
 
         if val_metrics['images']:
@@ -560,33 +658,60 @@ def main():
             }, step=epoch)
 
         print(f"\nEpoch {epoch}:")
-        print(f"  Train - loss: {train_metrics['loss']:.4f}, x: {train_metrics['loss_x']:.4f}, y: {train_metrics['loss_y']:.4f}, done: {train_metrics['loss_done']:.4f}")
-        print(f"  Val   - loss: {val_metrics['loss']:.4f}, x: {val_metrics['loss_x']:.4f}, y: {val_metrics['loss_y']:.4f}, done: {val_metrics['loss_done']:.4f}")
+        print(f"  Train - coord: {train_metrics['loss_coord']:.4f}, done: {train_metrics['loss_done']:.4f}, x: {train_metrics['loss_x']:.4f}, y: {train_metrics['loss_y']:.4f}")
+        print(f"  Val   - coord: {val_metrics['loss_coord']:.4f}, done: {val_metrics['loss_done']:.4f}, x: {val_metrics['loss_x']:.4f}, y: {val_metrics['loss_y']:.4f}")
 
-        # Save best model
-        if val_metrics['loss'] < best_val_loss:
-            best_val_loss = val_metrics['loss']
-            patience_counter = 0  # Reset counter on improvement
-            model.save_pretrained(str(output_dir / 'best_checkpoint'))
-            print(f"✅ New best model! Val loss: {val_metrics['loss']:.4f}")
-            wandb.run.summary["best_val_loss"] = best_val_loss
-            wandb.run.summary["best_epoch"] = epoch
+        # Track best models separately for each task
+        improved_coord = False
+        improved_done = False
+
+        # TASK 1: Coordinate prediction
+        if val_metrics['loss_coord'] < best_val_loss_coord:
+            best_val_loss_coord = val_metrics['loss_coord']
+            patience_counter_coord = 0
+            improved_coord = True
+            model.save_pretrained(str(output_dir / 'best_coord_checkpoint'))
+            print(f"✅ New best COORD model! Val loss_coord: {val_metrics['loss_coord']:.4f}")
+            wandb.run.summary["best_val_loss_coord"] = best_val_loss_coord
+            wandb.run.summary["best_coord_epoch"] = epoch
         else:
-            patience_counter += 1
-            print(f"No improvement for {patience_counter} epoch(s)")
-            if patience_counter >= early_stop_patience:
-                print(f"\n🛑 Early stopping triggered at epoch {epoch}")
-                print(f"Best validation loss: {best_val_loss:.4f}")
-                wandb.run.summary["stopped_early"] = True
-                wandb.run.summary["stopped_at_epoch"] = epoch
-                break
+            patience_counter_coord += 1
+
+        # TASK 2: Done signal
+        if val_metrics['loss_done'] < best_val_loss_done:
+            best_val_loss_done = val_metrics['loss_done']
+            patience_counter_done = 0
+            improved_done = True
+            model.save_pretrained(str(output_dir / 'best_done_checkpoint'))
+            print(f"✅ New best DONE model! Val loss_done: {val_metrics['loss_done']:.4f}")
+            wandb.run.summary["best_val_loss_done"] = best_val_loss_done
+            wandb.run.summary["best_done_epoch"] = epoch
+        else:
+            patience_counter_done += 1
+
+        # Early stopping: Stop if BOTH tasks have stopped improving
+        if patience_counter_coord >= early_stop_patience and patience_counter_done >= early_stop_patience:
+            print(f"\n🛑 Early stopping triggered at epoch {epoch}")
+            print(f"  Coord task: no improvement for {patience_counter_coord} epochs (best: {best_val_loss_coord:.4f})")
+            print(f"  Done task: no improvement for {patience_counter_done} epochs (best: {best_val_loss_done:.4f})")
+            wandb.run.summary["stopped_early"] = True
+            wandb.run.summary["stopped_at_epoch"] = epoch
+            break
+        elif patience_counter_coord < early_stop_patience or patience_counter_done < early_stop_patience:
+            if not improved_coord and not improved_done:
+                print(f"  Coord: no improvement for {patience_counter_coord}/{early_stop_patience} epochs")
+                print(f"  Done: no improvement for {patience_counter_done}/{early_stop_patience} epochs")
 
         # Save latest
         model.save_pretrained(str(output_dir / 'latest_checkpoint'))
 
     print("\nTraining complete!")
-    print(f"Best validation loss: {best_val_loss:.4f}")
-    print(f"Model saved to: {output_dir}")
+    print(f"Best coord loss: {best_val_loss_coord:.4f}")
+    print(f"Best done loss: {best_val_loss_done:.4f}")
+    print(f"Models saved to: {output_dir}")
+    print(f"  - best_coord_checkpoint/ (best coordinate prediction)")
+    print(f"  - best_done_checkpoint/ (best done signal)")
+    print(f"  - latest_checkpoint/ (final epoch)")
 
     wandb.finish()
 

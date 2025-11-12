@@ -1,0 +1,397 @@
+{
+  "count": 65,
+  "strategy": "dense_with_validation",
+  "crops": [
+    {
+      "bbox": [
+        0,
+        0,
+        567,
+        384
+      ],
+      "count": 67,
+      "confidence": 0.8,
+      "strategy": "global_validation",
+      "level": 0,
+      "overlap_factor": 0.0
+    },
+    {
+      "bbox": [
+        0,
+        0,
+        298,
+        202
+      ],
+      "count": 12,
+      "confidence": 0.7,
+      "strategy": "subglobal_validation",
+      "level": 1,
+      "overlap_factor": 0.1
+    },
+    {
+      "bbox": [
+        268,
+        0,
+        566,
+        202
+      ],
+      "count": 12,
+      "confidence": 0.7,
+      "strategy": "subglobal_validation",
+      "level": 1,
+      "overlap_factor": 0.1
+    },
+    {
+      "bbox": [
+        0,
+        181,
+        298,
+        383
+      ],
+      "count": 12,
+      "confidence": 0.7,
+      "strategy": "subglobal_validation",
+      "level": 1,
+      "overlap_factor": 0.1
+    },
+    {
+      "bbox": [
+        268,
+        181,
+        566,
+        383
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "subglobal_validation",
+      "level": 1,
+      "overlap_factor": 0.1
+    },
+    {
+      "bbox": [
+        0,
+        0,
+        149,
+        101
+      ],
+      "count": 10,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        104,
+        0,
+        253,
+        101
+      ],
+      "count": 10,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        208,
+        0,
+        357,
+        101
+      ],
+      "count": 8,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        312,
+        0,
+        461,
+        101
+      ],
+      "count": 3,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        416,
+        0,
+        565,
+        101
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        0,
+        70,
+        149,
+        171
+      ],
+      "count": 10,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        104,
+        70,
+        253,
+        171
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        208,
+        70,
+        357,
+        171
+      ],
+      "count": 12,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        312,
+        70,
+        461,
+        171
+      ],
+      "count": 10,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        416,
+        70,
+        565,
+        171
+      ],
+      "count": 12,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        0,
+        140,
+        149,
+        241
+      ],
+      "count": 7,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        104,
+        140,
+        253,
+        241
+      ],
+      "count": 8,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        208,
+        140,
+        357,
+        241
+      ],
+      "count": 7,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        312,
+        140,
+        461,
+        241
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        416,
+        140,
+        565,
+        241
+      ],
+      "count": 7,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        0,
+        210,
+        149,
+        311
+      ],
+      "count": 5,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        104,
+        210,
+        253,
+        311
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        208,
+        210,
+        357,
+        311
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        312,
+        210,
+        461,
+        311
+      ],
+      "count": 7,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        416,
+        210,
+        565,
+        311
+      ],
+      "count": 5,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        0,
+        280,
+        149,
+        381
+      ],
+      "count": 3,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        104,
+        280,
+        253,
+        381
+      ],
+      "count": 3,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        208,
+        280,
+        357,
+        381
+      ],
+      "count": 3,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        312,
+        280,
+        461,
+        381
+      ],
+      "count": 6,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    },
+    {
+      "bbox": [
+        416,
+        280,
+        565,
+        381
+      ],
+      "count": 4,
+      "confidence": 0.7,
+      "strategy": "dense_grid",
+      "level": 1,
+      "overlap_factor": 0.3
+    }
+  ],
+  "global_count": 67
+}

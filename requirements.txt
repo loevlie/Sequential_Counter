@@ -1,17 +1,22 @@
-torch>=2.0.0
-torchvision>=0.15.0
+torch>=2.0.0,<2.5.0
+torchvision>=0.15.0,<0.20.0
 transformers>=4.45.0
 datasets>=2.14.0
 pillow>=9.0.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 opencv-python>=4.8.0
 tqdm>=4.65.0
 pandas>=2.0.0
 scikit-learn>=1.3.0
-matplotlib>=3.7.0
+matplotlib>=3.7.0,<3.9.0
 
-# VLM dependencies (for LLaVA-CoT approach)
+# VLM dependencies
 peft>=0.7.0
 bitsandbytes>=0.41.0
 accelerate>=0.25.0
 sentencepiece>=0.1.99
+qwen-vl-utils
+
+# RL training (for GRPO)
+trl>=0.9.0
+wandb>=0.16.0

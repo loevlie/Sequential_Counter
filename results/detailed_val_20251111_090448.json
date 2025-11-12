@@ -1,0 +1,1028 @@
+{
+  "summary": {
+    "Direct VLM": {
+      "mae": 65.5,
+      "rmse": 143.87876841285512,
+      "mean_error": -54.9,
+      "std_error": 132.99281935503134,
+      "avg_time": 2.468342137336731
+    },
+    "VLM Dense Grid": {
+      "mae": 51.6,
+      "rmse": 110.26921601244837,
+      "mean_error": -32.0,
+      "std_error": 105.5239309351201,
+      "avg_time": 17.144270730018615
+    },
+    "VLM Adaptive": {
+      "mae": 52.65,
+      "rmse": 120.01729042100558,
+      "mean_error": -40.95,
+      "std_error": 112.81510315556159,
+      "avg_time": 15.920215022563934
+    },
+    "VLM Hybrid": {
+      "mae": 52.2,
+      "rmse": 113.42750989067864,
+      "mean_error": -40.6,
+      "std_error": 105.91241664696354,
+      "avg_time": 10.73722265958786
+    },
+    "GroundingDINO": {
+      "mae": 70.65,
+      "rmse": 150.24064030747473,
+      "mean_error": -70.55,
+      "std_error": 132.64594792152528,
+      "avg_time": 0.10748981237411499
+    },
+    "GroundingDINO Tiled": {
+      "mae": 69.9,
+      "rmse": 144.9320530455565,
+      "mean_error": -52.9,
+      "std_error": 134.93290925493307,
+      "avg_time": 0.7894869804382324
+    }
+  },
+  "detailed": [
+    {
+      "image_id": "934.jpg",
+      "category": "birds",
+      "ground_truth": 13,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": -1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 2.683368682861328
+        },
+        "VLM Dense Grid": {
+          "count": 25,
+          "error": 12,
+          "abs_error": 12,
+          "squared_error": 144,
+          "time": 16.367164611816406
+        },
+        "VLM Adaptive": {
+          "count": 20,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 15.302804231643677
+        },
+        "VLM Hybrid": {
+          "count": 18,
+          "error": 5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 10.396677017211914
+        },
+        "GroundingDINO": {
+          "count": 12,
+          "error": -1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 0.4445607662200928
+        },
+        "GroundingDINO Tiled": {
+          "count": 28,
+          "error": 15,
+          "abs_error": 15,
+          "squared_error": 225,
+          "time": 1.0705909729003906
+        }
+      }
+    },
+    {
+      "image_id": "558.jpg",
+      "category": "flamingos",
+      "ground_truth": 20,
+      "predictions": {
+        "Direct VLM": {
+          "count": 27,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 3.733290672302246
+        },
+        "VLM Dense Grid": {
+          "count": 33,
+          "error": 13,
+          "abs_error": 13,
+          "squared_error": 169,
+          "time": 18.601953268051147
+        },
+        "VLM Adaptive": {
+          "count": 20,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 19.607054710388184
+        },
+        "VLM Hybrid": {
+          "count": 19,
+          "error": -1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 12.145106315612793
+        },
+        "GroundingDINO": {
+          "count": 17,
+          "error": -3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 0.09853029251098633
+        },
+        "GroundingDINO Tiled": {
+          "count": 32,
+          "error": 12,
+          "abs_error": 12,
+          "squared_error": 144,
+          "time": 0.8247771263122559
+        }
+      }
+    },
+    {
+      "image_id": "3775.jpg",
+      "category": "donuts tray",
+      "ground_truth": 12,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 1.9899277687072754
+        },
+        "VLM Dense Grid": {
+          "count": 14,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 16.77655267715454
+        },
+        "VLM Adaptive": {
+          "count": 10,
+          "error": -2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 9.59459638595581
+        },
+        "VLM Hybrid": {
+          "count": 7,
+          "error": -5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 10.273579359054565
+        },
+        "GroundingDINO": {
+          "count": 10,
+          "error": -2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 0.0778810977935791
+        },
+        "GroundingDINO Tiled": {
+          "count": 9,
+          "error": -3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 0.6599235534667969
+        }
+      }
+    },
+    {
+      "image_id": "3560.jpg",
+      "category": "chicken wings",
+      "ground_truth": 23,
+      "predictions": {
+        "Direct VLM": {
+          "count": 48,
+          "error": 25,
+          "abs_error": 25,
+          "squared_error": 625,
+          "time": 2.11677622795105
+        },
+        "VLM Dense Grid": {
+          "count": 59,
+          "error": 36,
+          "abs_error": 36,
+          "squared_error": 1296,
+          "time": 16.91823935508728
+        },
+        "VLM Adaptive": {
+          "count": 49,
+          "error": 26,
+          "abs_error": 26,
+          "squared_error": 676,
+          "time": 14.711417436599731
+        },
+        "VLM Hybrid": {
+          "count": 44,
+          "error": 21,
+          "abs_error": 21,
+          "squared_error": 441,
+          "time": 10.47465443611145
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -22,
+          "abs_error": 22,
+          "squared_error": 484,
+          "time": 0.0807952880859375
+        },
+        "GroundingDINO Tiled": {
+          "count": 37,
+          "error": 14,
+          "abs_error": 14,
+          "squared_error": 196,
+          "time": 0.7050952911376953
+        }
+      }
+    },
+    {
+      "image_id": "3485.jpg",
+      "category": "polka dots",
+      "ground_truth": 174,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": -162,
+          "abs_error": 162,
+          "squared_error": 26244,
+          "time": 2.7132461071014404
+        },
+        "VLM Dense Grid": {
+          "count": 72,
+          "error": -102,
+          "abs_error": 102,
+          "squared_error": 10404,
+          "time": 17.240278482437134
+        },
+        "VLM Adaptive": {
+          "count": 40,
+          "error": -134,
+          "abs_error": 134,
+          "squared_error": 17956,
+          "time": 16.400865077972412
+        },
+        "VLM Hybrid": {
+          "count": 49,
+          "error": -125,
+          "abs_error": 125,
+          "squared_error": 15625,
+          "time": 11.040317058563232
+        },
+        "GroundingDINO": {
+          "count": 6,
+          "error": -168,
+          "abs_error": 168,
+          "squared_error": 28224,
+          "time": 0.11805152893066406
+        },
+        "GroundingDINO Tiled": {
+          "count": 17,
+          "error": -157,
+          "abs_error": 157,
+          "squared_error": 24649,
+          "time": 0.9217407703399658
+        }
+      }
+    },
+    {
+      "image_id": "1919.jpg",
+      "category": "bottle caps",
+      "ground_truth": 436,
+      "predictions": {
+        "Direct VLM": {
+          "count": 0,
+          "error": -436,
+          "abs_error": 436,
+          "squared_error": 190096,
+          "time": 2.2173168659210205
+        },
+        "VLM Dense Grid": {
+          "count": 126,
+          "error": -310,
+          "abs_error": 310,
+          "squared_error": 96100,
+          "time": 17.269927978515625
+        },
+        "VLM Adaptive": {
+          "count": 110,
+          "error": -326,
+          "abs_error": 326,
+          "squared_error": 106276,
+          "time": 21.53675389289856
+        },
+        "VLM Hybrid": {
+          "count": 121,
+          "error": -315,
+          "abs_error": 315,
+          "squared_error": 99225,
+          "time": 10.564652919769287
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -435,
+          "abs_error": 435,
+          "squared_error": 189225,
+          "time": 0.08173131942749023
+        },
+        "GroundingDINO Tiled": {
+          "count": 18,
+          "error": -418,
+          "abs_error": 418,
+          "squared_error": 174724,
+          "time": 0.7135260105133057
+        }
+      }
+    },
+    {
+      "image_id": "873.jpg",
+      "category": "books",
+      "ground_truth": 21,
+      "predictions": {
+        "Direct VLM": {
+          "count": 62,
+          "error": 41,
+          "abs_error": 41,
+          "squared_error": 1681,
+          "time": 2.578965663909912
+        },
+        "VLM Dense Grid": {
+          "count": 38,
+          "error": 17,
+          "abs_error": 17,
+          "squared_error": 289,
+          "time": 16.98824405670166
+        },
+        "VLM Adaptive": {
+          "count": 27,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 15.857260704040527
+        },
+        "VLM Hybrid": {
+          "count": 27,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 10.73127293586731
+        },
+        "GroundingDINO": {
+          "count": 21,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 0.09874296188354492
+        },
+        "GroundingDINO Tiled": {
+          "count": 36,
+          "error": 15,
+          "abs_error": 15,
+          "squared_error": 225,
+          "time": 0.8767738342285156
+        }
+      }
+    },
+    {
+      "image_id": "7619.jpg",
+      "category": "books",
+      "ground_truth": 16,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": -4,
+          "abs_error": 4,
+          "squared_error": 16,
+          "time": 1.9918789863586426
+        },
+        "VLM Dense Grid": {
+          "count": 27,
+          "error": 11,
+          "abs_error": 11,
+          "squared_error": 121,
+          "time": 16.935346603393555
+        },
+        "VLM Adaptive": {
+          "count": 23,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 14.360764503479004
+        },
+        "VLM Hybrid": {
+          "count": 21,
+          "error": 5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 10.386597633361816
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -15,
+          "abs_error": 15,
+          "squared_error": 225,
+          "time": 0.08075809478759766
+        },
+        "GroundingDINO Tiled": {
+          "count": 22,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 0.690758228302002
+        }
+      }
+    },
+    {
+      "image_id": "833.jpg",
+      "category": "bottle caps",
+      "ground_truth": 54,
+      "predictions": {
+        "Direct VLM": {
+          "count": 64,
+          "error": 10,
+          "abs_error": 10,
+          "squared_error": 100,
+          "time": 2.417711019515991
+        },
+        "VLM Dense Grid": {
+          "count": 80,
+          "error": 26,
+          "abs_error": 26,
+          "squared_error": 676,
+          "time": 16.955451011657715
+        },
+        "VLM Adaptive": {
+          "count": 76,
+          "error": 22,
+          "abs_error": 22,
+          "squared_error": 484,
+          "time": 21.68546962738037
+        },
+        "VLM Hybrid": {
+          "count": 72,
+          "error": 18,
+          "abs_error": 18,
+          "squared_error": 324,
+          "time": 10.630268812179565
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -53,
+          "abs_error": 53,
+          "squared_error": 2809,
+          "time": 0.09202933311462402
+        },
+        "GroundingDINO Tiled": {
+          "count": 22,
+          "error": -32,
+          "abs_error": 32,
+          "squared_error": 1024,
+          "time": 0.7865731716156006
+        }
+      }
+    },
+    {
+      "image_id": "7314.jpg",
+      "category": "skateboard",
+      "ground_truth": 23,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": -11,
+          "abs_error": 11,
+          "squared_error": 121,
+          "time": 2.396862506866455
+        },
+        "VLM Dense Grid": {
+          "count": 26,
+          "error": 3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 16.83486819267273
+        },
+        "VLM Adaptive": {
+          "count": 29,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 15.40326476097107
+        },
+        "VLM Hybrid": {
+          "count": 31,
+          "error": 8,
+          "abs_error": 8,
+          "squared_error": 64,
+          "time": 10.639387607574463
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -22,
+          "abs_error": 22,
+          "squared_error": 484,
+          "time": 0.09072279930114746
+        },
+        "GroundingDINO Tiled": {
+          "count": 10,
+          "error": -13,
+          "abs_error": 13,
+          "squared_error": 169,
+          "time": 0.8037698268890381
+        }
+      }
+    },
+    {
+      "image_id": "5152.jpg",
+      "category": "toilet paper rolls",
+      "ground_truth": 8,
+      "predictions": {
+        "Direct VLM": {
+          "count": 10,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 2.4539794921875
+        },
+        "VLM Dense Grid": {
+          "count": 24,
+          "error": 16,
+          "abs_error": 16,
+          "squared_error": 256,
+          "time": 16.820518732070923
+        },
+        "VLM Adaptive": {
+          "count": 16,
+          "error": 8,
+          "abs_error": 8,
+          "squared_error": 64,
+          "time": 10.78815221786499
+        },
+        "VLM Hybrid": {
+          "count": 15,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 10.533070802688599
+        },
+        "GroundingDINO": {
+          "count": 9,
+          "error": 1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 0.08942937850952148
+        },
+        "GroundingDINO Tiled": {
+          "count": 21,
+          "error": 13,
+          "abs_error": 13,
+          "squared_error": 169,
+          "time": 0.7846066951751709
+        }
+      }
+    },
+    {
+      "image_id": "573.jpg",
+      "category": "flamingos",
+      "ground_truth": 10,
+      "predictions": {
+        "Direct VLM": {
+          "count": 11,
+          "error": 1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 2.716799259185791
+        },
+        "VLM Dense Grid": {
+          "count": 14,
+          "error": 4,
+          "abs_error": 4,
+          "squared_error": 16,
+          "time": 17.188300371170044
+        },
+        "VLM Adaptive": {
+          "count": 12,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 16.32004165649414
+        },
+        "VLM Hybrid": {
+          "count": 12,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 10.865553379058838
+        },
+        "GroundingDINO": {
+          "count": 10,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 0.09711694717407227
+        },
+        "GroundingDINO Tiled": {
+          "count": 18,
+          "error": 8,
+          "abs_error": 8,
+          "squared_error": 64,
+          "time": 0.85805344581604
+        }
+      }
+    },
+    {
+      "image_id": "569.jpg",
+      "category": "flamingos",
+      "ground_truth": 17,
+      "predictions": {
+        "Direct VLM": {
+          "count": 13,
+          "error": -4,
+          "abs_error": 4,
+          "squared_error": 16,
+          "time": 3.3105099201202393
+        },
+        "VLM Dense Grid": {
+          "count": 27,
+          "error": 10,
+          "abs_error": 10,
+          "squared_error": 100,
+          "time": 16.97685146331787
+        },
+        "VLM Adaptive": {
+          "count": 24,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 17.622705936431885
+        },
+        "VLM Hybrid": {
+          "count": 25,
+          "error": 8,
+          "abs_error": 8,
+          "squared_error": 64,
+          "time": 10.978315591812134
+        },
+        "GroundingDINO": {
+          "count": 16,
+          "error": -1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 0.09911274909973145
+        },
+        "GroundingDINO Tiled": {
+          "count": 44,
+          "error": 27,
+          "abs_error": 27,
+          "squared_error": 729,
+          "time": 0.8595876693725586
+        }
+      }
+    },
+    {
+      "image_id": "850.jpg",
+      "category": "books",
+      "ground_truth": 183,
+      "predictions": {
+        "Direct VLM": {
+          "count": 12,
+          "error": -171,
+          "abs_error": 171,
+          "squared_error": 29241,
+          "time": 1.9704506397247314
+        },
+        "VLM Dense Grid": {
+          "count": 118,
+          "error": -65,
+          "abs_error": 65,
+          "squared_error": 4225,
+          "time": 16.98832607269287
+        },
+        "VLM Adaptive": {
+          "count": 110,
+          "error": -73,
+          "abs_error": 73,
+          "squared_error": 5329,
+          "time": 20.935800313949585
+        },
+        "VLM Hybrid": {
+          "count": 55,
+          "error": -128,
+          "abs_error": 128,
+          "squared_error": 16384,
+          "time": 10.433890581130981
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -182,
+          "abs_error": 182,
+          "squared_error": 33124,
+          "time": 0.07668495178222656
+        },
+        "GroundingDINO Tiled": {
+          "count": 15,
+          "error": -168,
+          "abs_error": 168,
+          "squared_error": 28224,
+          "time": 0.662466287612915
+        }
+      }
+    },
+    {
+      "image_id": "3436.jpg",
+      "category": "polka dots",
+      "ground_truth": 443,
+      "predictions": {
+        "Direct VLM": {
+          "count": 36,
+          "error": -407,
+          "abs_error": 407,
+          "squared_error": 165649,
+          "time": 1.9735684394836426
+        },
+        "VLM Dense Grid": {
+          "count": 84,
+          "error": -359,
+          "abs_error": 359,
+          "squared_error": 128881,
+          "time": 16.98935294151306
+        },
+        "VLM Adaptive": {
+          "count": 47,
+          "error": -396,
+          "abs_error": 396,
+          "squared_error": 156816,
+          "time": 14.51362133026123
+        },
+        "VLM Hybrid": {
+          "count": 90,
+          "error": -353,
+          "abs_error": 353,
+          "squared_error": 124609,
+          "time": 10.478861570358276
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -442,
+          "abs_error": 442,
+          "squared_error": 195364,
+          "time": 0.07666730880737305
+        },
+        "GroundingDINO Tiled": {
+          "count": 9,
+          "error": -434,
+          "abs_error": 434,
+          "squared_error": 188356,
+          "time": 0.6711890697479248
+        }
+      }
+    },
+    {
+      "image_id": "3530.jpg",
+      "category": "chicken wings",
+      "ground_truth": 8,
+      "predictions": {
+        "Direct VLM": {
+          "count": 0,
+          "error": -8,
+          "abs_error": 8,
+          "squared_error": 64,
+          "time": 2.389686346054077
+        },
+        "VLM Dense Grid": {
+          "count": 17,
+          "error": 9,
+          "abs_error": 9,
+          "squared_error": 81,
+          "time": 16.79108476638794
+        },
+        "VLM Adaptive": {
+          "count": 3,
+          "error": -5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 10.825377464294434
+        },
+        "VLM Hybrid": {
+          "count": 7,
+          "error": -1,
+          "abs_error": 1,
+          "squared_error": 1,
+          "time": 10.565106391906738
+        },
+        "GroundingDINO": {
+          "count": 8,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 0.09006905555725098
+        },
+        "GroundingDINO Tiled": {
+          "count": 20,
+          "error": 12,
+          "abs_error": 12,
+          "squared_error": 144,
+          "time": 0.7865796089172363
+        }
+      }
+    },
+    {
+      "image_id": "6096.jpg",
+      "category": "chicken wings",
+      "ground_truth": 18,
+      "predictions": {
+        "Direct VLM": {
+          "count": 24,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 1.9744091033935547
+        },
+        "VLM Dense Grid": {
+          "count": 20,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 16.822822332382202
+        },
+        "VLM Adaptive": {
+          "count": 22,
+          "error": 4,
+          "abs_error": 4,
+          "squared_error": 16,
+          "time": 14.279317617416382
+        },
+        "VLM Hybrid": {
+          "count": 24,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 10.329703092575073
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -17,
+          "abs_error": 17,
+          "squared_error": 289,
+          "time": 0.0787041187286377
+        },
+        "GroundingDINO Tiled": {
+          "count": 34,
+          "error": 16,
+          "abs_error": 16,
+          "squared_error": 256,
+          "time": 0.6759295463562012
+        }
+      }
+    },
+    {
+      "image_id": "7582.jpg",
+      "category": "pills",
+      "ground_truth": 25,
+      "predictions": {
+        "Direct VLM": {
+          "count": 32,
+          "error": 7,
+          "abs_error": 7,
+          "squared_error": 49,
+          "time": 2.1136913299560547
+        },
+        "VLM Dense Grid": {
+          "count": 36,
+          "error": 11,
+          "abs_error": 11,
+          "squared_error": 121,
+          "time": 17.445966958999634
+        },
+        "VLM Adaptive": {
+          "count": 31,
+          "error": 6,
+          "abs_error": 6,
+          "squared_error": 36,
+          "time": 14.7200767993927
+        },
+        "VLM Hybrid": {
+          "count": 37,
+          "error": 12,
+          "abs_error": 12,
+          "squared_error": 144,
+          "time": 10.534221410751343
+        },
+        "GroundingDINO": {
+          "count": 1,
+          "error": -24,
+          "abs_error": 24,
+          "squared_error": 576,
+          "time": 0.08006143569946289
+        },
+        "GroundingDINO Tiled": {
+          "count": 52,
+          "error": 27,
+          "abs_error": 27,
+          "squared_error": 729,
+          "time": 0.6986117362976074
+        }
+      }
+    },
+    {
+      "image_id": "561.jpg",
+      "category": "flamingos",
+      "ground_truth": 13,
+      "predictions": {
+        "Direct VLM": {
+          "count": 15,
+          "error": 2,
+          "abs_error": 2,
+          "squared_error": 4,
+          "time": 2.735507011413574
+        },
+        "VLM Dense Grid": {
+          "count": 24,
+          "error": 11,
+          "abs_error": 11,
+          "squared_error": 121,
+          "time": 17.206881523132324
+        },
+        "VLM Adaptive": {
+          "count": 16,
+          "error": 3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 16.333210706710815
+        },
+        "VLM Hybrid": {
+          "count": 16,
+          "error": 3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 10.876610279083252
+        },
+        "GroundingDINO": {
+          "count": 13,
+          "error": 0,
+          "abs_error": 0,
+          "squared_error": 0,
+          "time": 0.0961923599243164
+        },
+        "GroundingDINO Tiled": {
+          "count": 18,
+          "error": 5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 0.8449156284332275
+        }
+      }
+    },
+    {
+      "image_id": "6794.jpg",
+      "category": "shirts",
+      "ground_truth": 27,
+      "predictions": {
+        "Direct VLM": {
+          "count": 32,
+          "error": 5,
+          "abs_error": 5,
+          "squared_error": 25,
+          "time": 2.8888967037200928
+        },
+        "VLM Dense Grid": {
+          "count": 40,
+          "error": 13,
+          "abs_error": 13,
+          "squared_error": 169,
+          "time": 18.76728320121765
+        },
+        "VLM Adaptive": {
+          "count": 40,
+          "error": 13,
+          "abs_error": 13,
+          "squared_error": 169,
+          "time": 17.60574507713318
+        },
+        "VLM Hybrid": {
+          "count": 42,
+          "error": 15,
+          "abs_error": 15,
+          "squared_error": 225,
+          "time": 11.866605997085571
+        },
+        "GroundingDINO": {
+          "count": 2,
+          "error": -25,
+          "abs_error": 25,
+          "squared_error": 625,
+          "time": 0.10195446014404297
+        },
+        "GroundingDINO Tiled": {
+          "count": 24,
+          "error": -3,
+          "abs_error": 3,
+          "squared_error": 9,
+          "time": 0.8942711353302002
+        }
+      }
+    }
+  ]
+}

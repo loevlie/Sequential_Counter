@@ -33,7 +33,7 @@ except ImportError:
 
 # Try importing transformers components
 try:
-    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+    from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     print("WARNING: Transformers library not available. Install with: pip install transformers")
@@ -249,9 +249,31 @@ def extract_gradcam_from_vlm(
     model.eval()
     device = next(model.parameters()).device
 
-    # Prepare inputs
+    # Prepare messages in Qwen3-VL chat format with image placeholder
+    if isinstance(prompt, list) and len(prompt) > 0 and isinstance(prompt[0], dict):
+        # prompt is already in chat format: [{'role': 'user', 'content': '...'}]
+        # Add image placeholder to the content
+        messages = [{
+            "role": prompt[0].get("role", "user"),
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": prompt[0].get("content", "")}
+            ]
+        }]
+    else:
+        # Convert string prompt to chat format with image
+        messages = [{
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": str(prompt)}
+            ]
+        }]
+
+    # Apply chat template and process
+    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
     inputs = processor(
-        text=[prompt],
+        text=[text],
         images=[image],
         return_tensors="pt"
     ).to(device)
@@ -268,9 +290,9 @@ def extract_gradcam_from_vlm(
 
     # Find target layer (default: last vision encoder layer)
     if target_layer_name is None:
-        # For Qwen2-VL, typically use the last vision encoder layer
-        if hasattr(model, 'visual'):
-            target = model.visual.transformer.resblocks[-1]
+        # For Qwen3-VL, use the last block in the visual encoder
+        if hasattr(model, 'visual') and hasattr(model.visual, 'blocks'):
+            target = model.visual.blocks[-1]
         elif hasattr(model, 'vision_model'):
             target = model.vision_model.encoder.layers[-1]
         else:
@@ -311,19 +333,38 @@ def extract_gradcam_from_vlm(
         gradcam = torch.relu(gradcam)
 
         # Convert to numpy and resize to image size
+        # Convert BFloat16 to float32 before numpy conversion
+        if gradcam.dtype == torch.bfloat16:
+            gradcam = gradcam.float()
         gradcam_np = gradcam.cpu().numpy().squeeze()
 
         # Resize to match image dimensions
         from scipy.ndimage import zoom
         h, w = image.size[1], image.size[0]
 
-        if gradcam_np.ndim > 2:
+        # Handle different dimensionalities
+        if gradcam_np.ndim == 0:
+            # Scalar - create uniform map
+            gradcam_np = np.full((h, w), float(gradcam_np))
+        elif gradcam_np.ndim == 1:
+            # 1D - reshape to square or create uniform map
+            size = int(np.sqrt(gradcam_np.size))
+            if size * size == gradcam_np.size:
+                gradcam_np = gradcam_np.reshape(size, size)
+            else:
+                # Can't reshape, create uniform map
+                gradcam_np = np.full((h, w), gradcam_np.mean())
+        elif gradcam_np.ndim > 2:
             # If there are extra dimensions, take mean
             while gradcam_np.ndim > 2:
                 gradcam_np = gradcam_np.mean(axis=0)
 
-        zoom_factors = (h / gradcam_np.shape[0], w / gradcam_np.shape[1])
-        gradcam_resized = zoom(gradcam_np, zoom_factors, order=1)
+        # Now resize if needed
+        if gradcam_np.shape[0] != h or gradcam_np.shape[1] != w:
+            zoom_factors = (h / gradcam_np.shape[0], w / gradcam_np.shape[1])
+            gradcam_resized = zoom(gradcam_np, zoom_factors, order=1)
+        else:
+            gradcam_resized = gradcam_np
 
         # Apply Gaussian smoothing for smoother appearance
         gradcam_resized = gaussian_filter(gradcam_resized, sigma=5.0)
@@ -585,7 +626,7 @@ def main():
 
     # Model arguments
     parser.add_argument(
-        "--model_name", type=str, default="Qwen/Qwen2-VL-2B-Instruct",
+        "--model_name", type=str, default="Qwen/Qwen3-VL-2B-Instruct",
         help="Model name or path"
     )
     parser.add_argument(
@@ -654,7 +695,7 @@ def main():
 
     # Load model and processor
     print(f"\nLoading model: {args.model_name}...")
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
+    model = Qwen3VLForConditionalGeneration.from_pretrained(
         args.model_name,
         torch_dtype=torch.bfloat16,
         device_map="auto"

@@ -5,12 +5,12 @@
 
 # Default settings
 DATA_ROOT="/media/M2SSD/FSC147"
-MODEL_NAME="Qwen/Qwen2-VL-2B-Instruct"
+MODEL_NAME="Qwen/Qwen3-VL-2B-Instruct"
 OUTPUT_DIR="./grpo_counting_checkpoints"
 
 # Training hyperparameters
 LEARNING_RATE=1e-6
-BATCH_SIZE=2
+BATCH_SIZE=2  # GRPO requires at least 2 generations
 NUM_EPOCHS=3
 GROUP_SIZE=4
 
@@ -18,9 +18,9 @@ GROUP_SIZE=4
 TRAIN_SAMPLES=100
 VAL_SAMPLES=20
 
-# Reward function settings (using smoothed GradCAM)
-GRADCAM_WEIGHT=0.6
-COUNT_WEIGHT=0.4
+# Reward function settings (disable GradCAM to save memory)
+GRADCAM_WEIGHT=0.0  # Disabled to save GPU memory
+COUNT_WEIGHT=1.0    # Use only count-based reward
 GAUSSIAN_SIGMA=20.0
 SMOOTHING_SIGMA=5.0
 

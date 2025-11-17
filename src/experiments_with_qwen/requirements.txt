@@ -1,0 +1,17 @@
+# Requirements for Qwen3-VL FSC147 training
+
+# Core dependencies
+torch>=2.0.0
+transformers>=4.45.0
+qwen-vl-utils>=0.0.8
+Pillow>=9.0.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# Training utilities
+wandb>=0.15.0
+gdown>=4.7.0  # For downloading dataset from Google Drive
+
+# Optional but recommended
+accelerate>=0.25.0  # For better multi-GPU support
+datasets>=2.14.0  # If you want to use HuggingFace datasets

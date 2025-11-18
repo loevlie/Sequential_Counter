@@ -343,7 +343,9 @@ class OptimizedQwenTrainer:
                                 print(f"Error computing attention heatmap: {e}")
 
                 # Combine losses with weights
-                loss = count_loss + 0.1 * attention_loss
+                # Attention weight is a key hyperparameter - increase for stronger spatial regularization
+                attention_weight = 5.0  # Increased from 0.1 to make attention loss ~20% of total
+                loss = count_loss + attention_weight * attention_loss
 
                 # Clamp loss to prevent explosions (increased threshold for initial training)
                 loss = torch.clamp(loss, max=100.0)  # Increased from 10.0 since normal losses are ~20
@@ -352,7 +354,17 @@ class OptimizedQwenTrainer:
             # loss = loss / batch_size
 
             # Backward pass with mixed precision
-            self.scaler.scale(loss).backward()
+            # Only do backward if we're not computing attention gradients
+            # to avoid FP16 scaler conflicts
+            if use_attention_loss and attention_loss > 0:
+                # Split the backward pass to avoid FP16 scaler issues
+                # First, backward on count loss only
+                self.scaler.scale(count_loss).backward(retain_graph=True)
+                # Then add attention loss without scaler
+                (attention_weight * attention_loss).backward()
+            else:
+                # Normal backward pass when no attention loss
+                self.scaler.scale(loss).backward()
 
             # Accumulate loss (use unscaled value)
             total_loss += loss.detach().float()

@@ -17,25 +17,46 @@ echo ""
 echo "Downloading FSC147 dataset (this may take a while)..."
 echo "Note: This is a 3GB+ download"
 
-# Using gdown for Google Drive downloads (install with: pip install gdown)
-# Alternative: use wget with direct links if available
+# Method 1: Direct download from alternative sources
+echo "Attempting download from alternative sources..."
 
-# Main dataset images (384x384 version)
-echo "Downloading images..."
-if command -v gdown &> /dev/null; then
-    # FSC147 images from Google Drive
-    gdown --fuzzy "https://drive.google.com/file/d/1ByFmTPPyqpUx9T2-vQK2X6wJ6pMky0zj/view?usp=sharing" -O FSC147_384_V2.zip
-else
-    echo "gdown not found. Installing..."
-    pip install gdown
-    gdown --fuzzy "https://drive.google.com/file/d/1ByFmTPPyqpUx9T2-vQK2X6wJ6pMky0zj/view?usp=sharing" -O FSC147_384_V2.zip
+# Try downloading from HuggingFace mirror (if available)
+# echo "Method 1: Trying HuggingFace mirror..."
+# wget -c https://huggingface.co/datasets/FSC147/resolve/main/FSC147_384_V2.zip -O FSC147_384_V2.zip
+
+# Method 2: Using gdown with proper file ID
+if [ ! -f FSC147_384_V2.zip ] || [ ! -s FSC147_384_V2.zip ]; then
+    echo "Method 2: Trying gdown with correct file ID..."
+    if command -v gdown &> /dev/null; then
+        gdown --id 1ymDYrGs9DSRicfZbSCDiOu0ikGDh5k6S -O FSC147_384_V2.zip
+    else
+        echo "gdown not found. Installing..."
+        pip install gdown
+        gdown --id 1ymDYrGs9DSRicfZbSCDiOu0ikGDh5k6S -O FSC147_384_V2.zip
+    fi
 fi
 
-# Alternative method using wget (if gdown fails)
-if [ ! -f FSC147_384_V2.zip ]; then
-    echo "Trying alternative download method..."
-    # You can use this direct link approach
-    wget --no-check-certificate 'https://docs.google.com/uc?export=download&id=1ByFmTPPyqpUx9T2-vQK2X6wJ6pMky0zj' -O FSC147_384_V2.zip
+# Method 3: Manual download instructions
+if [ ! -f FSC147_384_V2.zip ] || [ ! -s FSC147_384_V2.zip ]; then
+    echo ""
+    echo "================================================"
+    echo "MANUAL DOWNLOAD REQUIRED"
+    echo "================================================"
+    echo "The automatic download failed. Please download manually:"
+    echo ""
+    echo "1. Visit: https://drive.google.com/file/d/1ByFmTPPyqpUx9T2-vQK2X6wJ6pMky0zj/view"
+    echo "2. Click 'Download' button"
+    echo "3. Save the file as: $DATA_DIR/FSC147_384_V2.zip"
+    echo ""
+    echo "Alternative source:"
+    echo "GitHub repo: https://github.com/cvlab-stonybrook/LearningToCountEverything"
+    echo ""
+    echo "Once downloaded, place the file here and re-run this script."
+    echo "================================================"
+
+    # Still download the annotations
+    echo ""
+    echo "Downloading annotations (these should work)..."
 fi
 
 # Download annotations

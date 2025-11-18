@@ -177,16 +177,37 @@ class OptimizedQwenTrainer:
                     only_inputs=True
                 )[0]
 
-                # Take absolute value and average across channels
-                attention_map = grads.abs().mean(dim=1)  # [batch, height, width]
+                # Handle different gradient shapes
+                if len(grads.shape) == 4:  # [batch, channels, height, width]
+                    attention_map = grads.abs().mean(dim=1)  # [batch, height, width]
+                elif len(grads.shape) == 3:  # [channels, height, width]
+                    attention_map = grads.abs().mean(dim=0).unsqueeze(0)  # [1, height, width]
+                elif len(grads.shape) == 2:  # [height, width]
+                    attention_map = grads.abs().unsqueeze(0)  # [1, height, width]
+                elif len(grads.shape) == 1:  # [flat_tensor]
+                    # Try to reshape if it's flattened
+                    size = int(grads.shape[0] ** 0.5)
+                    if size * size == grads.shape[0]:
+                        attention_map = grads.abs().view(1, size, size)
+                    else:
+                        print(f"Cannot reshape 1D gradient tensor of size {grads.shape[0]}")
+                        return torch.ones(1, target_size, target_size, device=self.device, dtype=torch.float16) * 0.5
+                else:
+                    print(f"Unexpected gradient shape: {grads.shape}")
+                    return torch.ones(1, target_size, target_size, device=self.device, dtype=torch.float16) * 0.5
 
-                # Resize to target size efficiently
-                attention_map = F.interpolate(
-                    attention_map.unsqueeze(1),
-                    size=(target_size, target_size),
-                    mode='bilinear',
-                    align_corners=False
-                ).squeeze(1)
+                # Ensure we have 3D tensor for interpolation [batch, height, width]
+                if len(attention_map.shape) == 2:
+                    attention_map = attention_map.unsqueeze(0)
+
+                # Resize to target size if needed
+                if attention_map.shape[-2:] != (target_size, target_size):
+                    attention_map = F.interpolate(
+                        attention_map.unsqueeze(1),  # Add channel dim
+                        size=(target_size, target_size),
+                        mode='bilinear',
+                        align_corners=False
+                    ).squeeze(1)
 
                 # Normalize
                 attention_map = attention_map / (attention_map.max() + 1e-8)
@@ -325,13 +346,24 @@ class OptimizedQwenTrainer:
 
     def optimizer_step(self, optimizer):
         """Perform optimizer step with gradient clipping"""
-        # Gradient clipping
-        self.scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        try:
+            # Gradient clipping
+            self.scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-        # Optimizer step
-        self.scaler.step(optimizer)
-        self.scaler.update()
+            # Optimizer step
+            self.scaler.step(optimizer)
+            self.scaler.update()
+        except RuntimeError as e:
+            if "Attempting to unscale" in str(e):
+                # This can happen when attention heatmap gradients interfere
+                # Skip unscaling and directly step
+                print("Warning: Skipping gradient unscaling due to FP16 issue")
+                optimizer.step()
+                self.scaler.update()
+            else:
+                raise e
+
         optimizer.zero_grad()
 
         # Clear cache

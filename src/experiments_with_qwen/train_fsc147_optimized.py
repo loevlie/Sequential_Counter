@@ -172,7 +172,7 @@ class OptimizedQwenTrainer:
                 grads = torch.autograd.grad(
                     outputs=loss_scalar,
                     inputs=pixel_values,
-                    create_graph=True,
+                    create_graph=False,  # Set to False to avoid flash attention backward issues
                     retain_graph=True,
                     only_inputs=True
                 )[0]
@@ -292,34 +292,49 @@ class OptimizedQwenTrainer:
 
                 # Count loss (language modeling)
                 count_loss = outputs.loss
+                if count_loss is None:
+                    print(f"Warning: outputs.loss is None for batch {i}")
+                    continue  # Skip this sample
+
+                # Debug: Print loss value occasionally
+                if i == 0 and torch.rand(1).item() < 0.01:  # 1% chance to print
+                    print(f"Debug - count_loss: {count_loss.item():.6f}")
 
                 # Compute attention loss efficiently
                 attention_loss = torch.tensor(0.0, device=self.device, dtype=torch.float16)
 
-                # Skip attention heatmap if gradient checkpointing is enabled (incompatible)
-                # You can disable gradient checkpointing if you need attention heatmaps
-                if not self.use_gradient_checkpointing:
-                    if inputs.get('pixel_values') is not None and inputs['pixel_values'].requires_grad:
-                        attention_heatmap = self.compute_attention_heatmap_efficient(
-                            outputs, inputs['pixel_values'], target_size=target_heatmap.shape[0]
-                        )
+                # Temporarily disable attention heatmap to avoid flash attention issues
+                # The gradient computation is incompatible with flash attention backward
+                use_attention_loss = False  # Set to True when flash attention is disabled
 
-                        if attention_heatmap is not None:
-                            # MSE loss for attention regularization
-                            attention_loss = F.mse_loss(
-                                attention_heatmap[0],
-                                target_heatmap,
-                                reduction='mean'
+                if use_attention_loss and not self.use_gradient_checkpointing:
+                    if inputs.get('pixel_values') is not None and inputs['pixel_values'].requires_grad:
+                        try:
+                            attention_heatmap = self.compute_attention_heatmap_efficient(
+                                outputs, inputs['pixel_values'], target_size=target_heatmap.shape[0]
                             )
 
-                            # Store for visualization if requested
-                            if return_heatmaps:
-                                heatmaps_for_viz.append({
-                                    'predicted': attention_heatmap[0].detach().cpu().numpy(),
-                                    'target': target_heatmap.detach().cpu().numpy(),
-                                    'image': image,
-                                    'count': true_count
-                                })
+                            if attention_heatmap is not None:
+                                # MSE loss for attention regularization
+                                attention_loss = F.mse_loss(
+                                    attention_heatmap[0],
+                                    target_heatmap,
+                                    reduction='mean'
+                                )
+
+                                # Store for visualization if requested
+                                if return_heatmaps:
+                                    heatmaps_for_viz.append({
+                                        'predicted': attention_heatmap[0].detach().cpu().numpy(),
+                                        'target': target_heatmap.detach().cpu().numpy(),
+                                        'image': image,
+                                        'count': true_count
+                                    })
+                        except RuntimeError as e:
+                            if "flash_attention_backward" in str(e):
+                                print(f"Flash attention backward not supported, skipping attention loss")
+                            else:
+                                print(f"Error computing attention heatmap: {e}")
 
                 # Combine losses with weights
                 loss = count_loss + 0.1 * attention_loss
@@ -327,8 +342,8 @@ class OptimizedQwenTrainer:
                 # Clamp loss to prevent explosions
                 loss = torch.clamp(loss, max=10.0)
 
-            # Scale loss for gradient accumulation
-            loss = loss / batch_size
+            # Don't scale loss since batch_size is always 1
+            # loss = loss / batch_size
 
             # Backward pass with mixed precision
             self.scaler.scale(loss).backward()
@@ -336,8 +351,12 @@ class OptimizedQwenTrainer:
             # Accumulate loss (use unscaled value)
             total_loss += loss.detach().float()
 
-        # Return results
-        loss_value = total_loss.item() * batch_size
+            # Debug print
+            if i == 0 and torch.rand(1).item() < 0.05:  # 5% chance
+                print(f"Debug - loss after backward: {loss.item():.6f}, total_loss so far: {total_loss.item():.6f}")
+
+        # Return results (don't multiply by batch_size since we didn't divide earlier)
+        loss_value = total_loss.item()
 
         if return_heatmaps:
             return loss_value, heatmaps_for_viz

@@ -21,6 +21,9 @@ import re
 from tqdm import tqdm
 import gc
 import warnings
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+from io import BytesIO
 warnings.filterwarnings('ignore')
 
 class FSC147Dataset(Dataset):
@@ -129,9 +132,13 @@ class OptimizedQwenTrainer:
             device_map="cuda"
         )
 
-        # Enable gradient checkpointing (will be disabled during attention heatmap computation)
-        self.model.gradient_checkpointing_enable()
-        self.use_gradient_checkpointing = True
+        # Disable gradient checkpointing by default to enable attention loss
+        # NOTE: This uses more memory but allows attention loss computation
+        # For limited memory, set use_gradient_checkpointing=True
+        self.use_gradient_checkpointing = False
+        if self.use_gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+            print("Warning: Gradient checkpointing enabled - attention loss will be disabled")
 
         # Only train language model initially
         for name, param in self.model.named_parameters():
@@ -193,11 +200,12 @@ class OptimizedQwenTrainer:
             print(f"Attention heatmap computation failed: {e}")
             return torch.ones(1, target_size, target_size, device=self.device, dtype=torch.float16) * 0.5
 
-    def train_step_optimized(self, batch, accumulate_only=False):
+    def train_step_optimized(self, batch, accumulate_only=False, return_heatmaps=False):
         """Optimized training step with mixed precision
         Args:
             batch: Training batch
             accumulate_only: If True, only accumulate gradients without optimizer step
+            return_heatmaps: If True, return attention heatmaps for visualization
         """
         images = batch['image']
         true_counts = batch['count'].to(self.device)
@@ -205,6 +213,7 @@ class OptimizedQwenTrainer:
 
         batch_size = len(images)
         total_loss = torch.tensor(0.0, device=self.device, dtype=torch.float32)
+        heatmaps_for_viz = [] if return_heatmaps else None
 
         for i in range(batch_size):
             # Clear any cached memory
@@ -282,6 +291,15 @@ class OptimizedQwenTrainer:
                                 reduction='mean'
                             )
 
+                            # Store for visualization if requested
+                            if return_heatmaps:
+                                heatmaps_for_viz.append({
+                                    'predicted': attention_heatmap[0].detach().cpu().numpy(),
+                                    'target': target_heatmap.detach().cpu().numpy(),
+                                    'image': image,
+                                    'count': true_count
+                                })
+
                 # Combine losses with weights
                 loss = count_loss + 0.1 * attention_loss
 
@@ -297,12 +315,13 @@ class OptimizedQwenTrainer:
             # Accumulate loss (use unscaled value)
             total_loss += loss.detach().float()
 
-        # Return loss without optimizer step if accumulating
-        if accumulate_only:
-            return total_loss.item() * batch_size
+        # Return results
+        loss_value = total_loss.item() * batch_size
 
-        # Otherwise, do the optimizer step
-        return total_loss.item() * batch_size
+        if return_heatmaps:
+            return loss_value, heatmaps_for_viz
+        else:
+            return loss_value
 
     def optimizer_step(self, optimizer):
         """Perform optimizer step with gradient clipping"""
@@ -403,21 +422,60 @@ def main():
         batch_count = 0
         optimizer.zero_grad()
 
-        pbar = tqdm(train_loader, desc="Training")
+        pbar = tqdm(train_loader, desc="Training", total=len(train_loader))
         accumulated_batches = []
 
-        for batch_idx, batch in enumerate(pbar):
+        for batch_idx, batch in enumerate(train_loader):
             try:
                 accumulated_batches.append(batch)
+                pbar.update(1)  # Update progress bar for each batch
 
-                # Process accumulated batches when we reach gradient_accumulation steps
-                if len(accumulated_batches) == args.gradient_accumulation or batch_idx == len(train_loader) - 1:
+                # Process accumulated batches when we reach gradient_accumulation steps or at the end
+                should_update = (len(accumulated_batches) == args.gradient_accumulation) or \
+                               (batch_idx == len(train_loader) - 1)
+
+                if should_update:
                     # Process all accumulated batches
                     total_batch_loss = 0
                     for i, acc_batch in enumerate(accumulated_batches):
                         # Only accumulate gradients for all but the last batch
                         accumulate_only = (i < len(accumulated_batches) - 1)
-                        loss = trainer.train_step_optimized(acc_batch, accumulate_only=accumulate_only)
+
+                        # Log heatmaps every 100 batches
+                        return_heatmaps = (batch_idx % 100 == 0) and (i == 0) and args.use_wandb and not trainer.use_gradient_checkpointing
+
+                        result = trainer.train_step_optimized(acc_batch, accumulate_only=accumulate_only, return_heatmaps=return_heatmaps)
+
+                        if return_heatmaps and isinstance(result, tuple):
+                            loss, heatmaps = result
+                            # Log first heatmap to wandb
+                            if heatmaps and len(heatmaps) > 0:
+                                viz = heatmaps[0]
+                                fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+                                # Original image
+                                axes[0].imshow(viz['image'])
+                                axes[0].set_title(f"Image (Count: {viz['count']})")
+                                axes[0].axis('off')
+
+                                # Target heatmap
+                                im1 = axes[1].imshow(viz['target'], cmap='hot', interpolation='nearest')
+                                axes[1].set_title("Target Heatmap")
+                                axes[1].axis('off')
+                                plt.colorbar(im1, ax=axes[1], fraction=0.046)
+
+                                # Predicted heatmap
+                                im2 = axes[2].imshow(viz['predicted'], cmap='hot', interpolation='nearest')
+                                axes[2].set_title("Predicted Attention")
+                                axes[2].axis('off')
+                                plt.colorbar(im2, ax=axes[2], fraction=0.046)
+
+                                plt.tight_layout()
+                                wandb.log({f"attention_heatmap_epoch{epoch}_batch{batch_idx}": wandb.Image(fig)})
+                                plt.close(fig)
+                        else:
+                            loss = result if not isinstance(result, tuple) else result[0]
+
                         total_batch_loss += loss
 
                     # Perform optimizer step after all batches
@@ -431,13 +489,14 @@ def main():
                     # Clear accumulated batches
                     accumulated_batches = []
 
-                    pbar.set_postfix({'loss': f'{avg_loss:.4f}'})
+                    pbar.set_postfix({'loss': f'{avg_loss:.4f}', 'batch': f'{batch_idx+1}/{len(train_loader)}'})
 
                     if args.use_wandb:
                         wandb.log({
                             'train_loss': avg_loss,
                             'learning_rate': scheduler.get_last_lr()[0],
-                            'epoch': epoch
+                            'epoch': epoch,
+                            'batch': batch_idx
                         })
 
             except torch.cuda.OutOfMemoryError:
@@ -449,8 +508,10 @@ def main():
 
             except Exception as e:
                 print(f"Error at batch {batch_idx}: {e}")
+                pbar.update(1)  # Still update progress even on error
                 continue
 
+        pbar.close()  # Close progress bar when done
         avg_train_loss = train_loss / max(batch_count, 1)
         print(f"Average training loss: {avg_train_loss:.4f}")
 

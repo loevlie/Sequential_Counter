@@ -126,10 +126,12 @@ class OptimizedQwenTrainer:
         self.device = device if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load model with optimizations
+        # Use eager attention instead of flash attention to allow gradient computation
         self.model = AutoModelForVision2Seq.from_pretrained(
             model_name,
             torch_dtype=torch.float16,  # Use float16 for memory
-            device_map="cuda"
+            device_map="cuda",
+            attn_implementation="eager"  # Enables attention gradient computation
         )
 
         # Disable gradient checkpointing by default to enable attention loss
@@ -303,9 +305,9 @@ class OptimizedQwenTrainer:
                 # Compute attention loss efficiently
                 attention_loss = torch.tensor(0.0, device=self.device, dtype=torch.float16)
 
-                # Temporarily disable attention heatmap to avoid flash attention issues
-                # The gradient computation is incompatible with flash attention backward
-                use_attention_loss = False  # Set to True when flash attention is disabled
+                # Enable attention loss now that we're using eager attention
+                # Eager attention supports backward gradients for attention heatmaps
+                use_attention_loss = True  # Enabled since we're using eager attention
 
                 if use_attention_loss and not self.use_gradient_checkpointing:
                     if inputs.get('pixel_values') is not None and inputs['pixel_values'].requires_grad:
@@ -321,6 +323,10 @@ class OptimizedQwenTrainer:
                                     target_heatmap,
                                     reduction='mean'
                                 )
+
+                                # Debug: Show attention loss occasionally
+                                if torch.rand(1).item() < 0.02:  # 2% chance
+                                    print(f"Debug - attention_loss: {attention_loss.item():.6f}")
 
                                 # Store for visualization if requested
                                 if return_heatmaps:
@@ -339,8 +345,8 @@ class OptimizedQwenTrainer:
                 # Combine losses with weights
                 loss = count_loss + 0.1 * attention_loss
 
-                # Clamp loss to prevent explosions
-                loss = torch.clamp(loss, max=10.0)
+                # Clamp loss to prevent explosions (increased threshold for initial training)
+                loss = torch.clamp(loss, max=100.0)  # Increased from 10.0 since normal losses are ~20
 
             # Don't scale loss since batch_size is always 1
             # loss = loss / batch_size

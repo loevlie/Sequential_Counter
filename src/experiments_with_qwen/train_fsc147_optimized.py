@@ -139,8 +139,9 @@ class OptimizedQwenTrainer:
         # For limited memory, set use_gradient_checkpointing=True
         self.use_gradient_checkpointing = False
         if self.use_gradient_checkpointing:
-            self.model.gradient_checkpointing_enable()
-            print("Warning: Gradient checkpointing enabled - attention loss will be disabled")
+            # Use non-reentrant mode for gradient checkpointing to support .grad()
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant': False})
+            print("Gradient checkpointing enabled with use_reentrant=False for attention loss support")
 
         # Only train language model initially
         for name, param in self.model.named_parameters():
@@ -491,13 +492,19 @@ def main():
         batch_count = 0
         optimizer.zero_grad()
 
-        pbar = tqdm(train_loader, desc="Training", total=len(train_loader))
+        # Better progress tracking that shows gradient accumulation steps
+        total_steps = len(train_loader) // args.gradient_accumulation
+        if len(train_loader) % args.gradient_accumulation != 0:
+            total_steps += 1  # Add one more step for remaining batches
+
+        pbar = tqdm(total=total_steps, desc=f"Training (GA={args.gradient_accumulation})")
         accumulated_batches = []
+        processed_batches = 0
 
         for batch_idx, batch in enumerate(train_loader):
             try:
                 accumulated_batches.append(batch)
-                pbar.update(1)  # Update progress bar for each batch
+                processed_batches += 1
 
                 # Process accumulated batches when we reach gradient_accumulation steps or at the end
                 should_update = (len(accumulated_batches) == args.gradient_accumulation) or \
@@ -555,18 +562,29 @@ def main():
                     batch_count += 1
                     scheduler.step()
 
+                    # Increment gradient accumulation step counter
+                    ga_step_count += 1
+
                     # Clear accumulated batches
                     accumulated_batches = []
 
+                    # Update progress bar after gradient accumulation step
+                    pbar.update(1)
                     pbar.set_postfix({'loss': f'{avg_loss:.4f}', 'batch': f'{batch_idx+1}/{len(train_loader)}'})
 
                     if args.use_wandb:
-                        wandb.log({
+                        # Log metrics immediately after each gradient accumulation step
+                        log_dict = {
                             'train_loss': avg_loss,
                             'learning_rate': scheduler.get_last_lr()[0],
                             'epoch': epoch,
-                            'batch': batch_idx
-                        })
+                            'batch': batch_idx,
+                            'ga_step': ga_step_count
+                        }
+
+                        # Add individual loss components if available from last batch
+                        # These would need to be captured from the training step
+                        wandb.log(log_dict, step=ga_step_count)
 
             except torch.cuda.OutOfMemoryError:
                 print(f"OOM at batch {batch_idx}, skipping...")
@@ -577,7 +595,7 @@ def main():
 
             except Exception as e:
                 print(f"Error at batch {batch_idx}: {e}")
-                pbar.update(1)  # Still update progress even on error
+                # Don't update progress here - only update after optimizer step
                 continue
 
         pbar.close()  # Close progress bar when done

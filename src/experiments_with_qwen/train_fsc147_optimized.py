@@ -284,10 +284,17 @@ class OptimizedQwenTrainer:
             inputs = {k: v.to(self.device) if hasattr(v, 'to') else v
                      for k, v in inputs.items()}
 
-            # Enable gradients for pixel values
+            # Store pixel values for gradient computation if needed
+            pixel_values = None
             if 'pixel_values' in inputs and inputs['pixel_values'] is not None:
-                inputs['pixel_values'] = inputs['pixel_values'].to(torch.float16)
-                inputs['pixel_values'].requires_grad = True
+                # Convert to float16 and create a new tensor with gradient tracking
+                pixel_values = inputs['pixel_values'].to(torch.float16)
+                # Only enable gradients if we're computing attention loss
+                if use_attention_loss and not self.use_gradient_checkpointing:
+                    pixel_values = pixel_values.detach().requires_grad_(True)
+                    inputs['pixel_values'] = pixel_values
+                else:
+                    inputs['pixel_values'] = pixel_values
 
             # Mixed precision forward pass
             with torch.cuda.amp.autocast(dtype=torch.float16):
@@ -306,15 +313,16 @@ class OptimizedQwenTrainer:
                 # Compute attention loss efficiently
                 attention_loss = torch.tensor(0.0, device=self.device, dtype=torch.float16)
 
-                # Enable attention loss now that we're using eager attention
-                # Eager attention supports backward gradients for attention heatmaps
-                use_attention_loss = True  # Enabled since we're using eager attention
+                # Temporarily disable attention loss to debug training
+                # TODO: Re-enable once gradient tracking is fixed
+                use_attention_loss = False  # TEMPORARILY DISABLED for debugging
 
                 if use_attention_loss and not self.use_gradient_checkpointing:
-                    if inputs.get('pixel_values') is not None and inputs['pixel_values'].requires_grad:
+                    # Use the pixel_values variable we set up earlier
+                    if pixel_values is not None and pixel_values.requires_grad:
                         try:
                             attention_heatmap = self.compute_attention_heatmap_efficient(
-                                outputs, inputs['pixel_values'], target_size=target_heatmap.shape[0]
+                                outputs, pixel_values, target_size=target_heatmap.shape[0]
                             )
 
                             if attention_heatmap is not None:
@@ -470,6 +478,9 @@ def main():
     # Training loop
     os.makedirs(args.checkpoint_dir, exist_ok=True)
 
+    # Global step counter for wandb logging
+    global_step = 0
+
     for epoch in range(args.epochs):
         print(f"\nEpoch {epoch+1}/{args.epochs}")
 
@@ -564,6 +575,7 @@ def main():
 
                     # Increment gradient accumulation step counter
                     ga_step_count += 1
+                    global_step += 1
 
                     # Clear accumulated batches
                     accumulated_batches = []
@@ -579,12 +591,12 @@ def main():
                             'learning_rate': scheduler.get_last_lr()[0],
                             'epoch': epoch,
                             'batch': batch_idx,
-                            'ga_step': ga_step_count
+                            'step': global_step
                         }
 
                         # Add individual loss components if available from last batch
                         # These would need to be captured from the training step
-                        wandb.log(log_dict, step=ga_step_count)
+                        wandb.log(log_dict, step=global_step)
 
             except torch.cuda.OutOfMemoryError:
                 print(f"OOM at batch {batch_idx}, skipping...")
@@ -595,7 +607,11 @@ def main():
 
             except Exception as e:
                 print(f"Error at batch {batch_idx}: {e}")
-                # Don't update progress here - only update after optimizer step
+                # Clear accumulated batches on error
+                if len(accumulated_batches) > 0:
+                    accumulated_batches = []
+                    optimizer.zero_grad()
+                # Continue to next batch
                 continue
 
         pbar.close()  # Close progress bar when done

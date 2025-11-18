@@ -252,6 +252,22 @@ class SimplifiedTrainer:
         return avg_loss.item(), avg_count_loss, avg_attention_loss
 
 
+def custom_collate_fn(batch):
+    """Custom collate function to handle PIL images"""
+    # Don't try to stack PIL images, keep them as a list
+    images = [item['image'] for item in batch]
+    counts = torch.stack([torch.tensor(item['count']) for item in batch])
+    target_heatmaps = torch.stack([item['target_heatmap'] for item in batch])
+    image_names = [item['image_name'] for item in batch]
+
+    return {
+        'image': images,
+        'count': counts,
+        'target_heatmap': target_heatmaps,
+        'image_name': image_names
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='/media/M2SSD/FSC147')
@@ -278,7 +294,8 @@ def main():
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2
+        num_workers=2,
+        collate_fn=custom_collate_fn
     )
 
     # Initialize trainer

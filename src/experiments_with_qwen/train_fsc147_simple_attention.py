@@ -139,17 +139,30 @@ class SimplifiedTrainer:
         )[0]
 
         # Average gradients across channels to get spatial importance
-        # Shape: [batch, channels, height, width] -> [batch, height, width]
-        attention_map = grads.abs().mean(dim=1)
+        # Qwen pixel_values shape: [batch, num_patches, channels] or [batch, channels, height, width]
+        if grads.dim() == 3:  # [batch, num_patches, channels]
+            # Reshape patches to spatial dimensions
+            batch_size = grads.shape[0]
+            # Assuming square patches, compute spatial dimensions
+            num_patches = grads.shape[1]
+            patch_size = int(num_patches ** 0.5)
+            grads = grads.reshape(batch_size, patch_size, patch_size, -1)
+            grads = grads.permute(0, 3, 1, 2)  # [batch, channels, height, width]
+
+        # Now grads should be [batch, channels, height, width]
+        attention_map = grads.abs().mean(dim=1, keepdim=True)  # [batch, 1, height, width]
 
         # Resize to target size
         if attention_map.shape[-1] != target_size:
             attention_map = F.interpolate(
-                attention_map.unsqueeze(1),
+                attention_map,
                 size=(target_size, target_size),
                 mode='bilinear',
                 align_corners=False
-            ).squeeze(1)
+            )
+
+        # Remove channel dimension
+        attention_map = attention_map.squeeze(1)  # [batch, height, width]
 
         # Normalize
         attention_map = attention_map - attention_map.min()
@@ -221,6 +234,12 @@ class SimplifiedTrainer:
 
             # Count loss
             count_loss = outputs.loss
+
+            # Check for NaN in count loss
+            if torch.isnan(count_loss):
+                print(f"Warning: NaN count loss at sample {i}, skipping...")
+                continue
+
             count_losses.append(count_loss.item())
 
             # Attention loss
@@ -230,26 +249,41 @@ class SimplifiedTrainer:
                 )
 
                 attention_loss = F.mse_loss(attention_heatmap[0], target_heatmap)
-                attention_losses.append(attention_loss.item())
 
-                # Combine losses
-                loss = count_loss + 5.0 * attention_loss  # Weight attention loss
+                # Check for NaN in attention loss
+                if not torch.isnan(attention_loss):
+                    attention_losses.append(attention_loss.item())
+                    # Combine losses
+                    loss = count_loss + 5.0 * attention_loss  # Weight attention loss
+                else:
+                    print(f"Warning: NaN attention loss at sample {i}")
+                    loss = count_loss
+                    attention_losses.append(0.0)
+
             except Exception as e:
-                print(f"Attention computation failed: {e}")
+                if i == 0:  # Only print error once per batch
+                    print(f"Attention computation failed: {e}")
                 loss = count_loss
                 attention_losses.append(0.0)
 
             total_loss += loss
 
         # Return average losses
-        avg_loss = total_loss / batch_size
-        avg_count_loss = np.mean(count_losses)
-        avg_attention_loss = np.mean(attention_losses)
+        if len(count_losses) == 0:
+            # No valid samples in batch
+            return 0.0, 0.0, 0.0
 
-        # Backward pass
-        avg_loss.backward()
+        num_valid = len(count_losses)
+        avg_loss = total_loss / num_valid
 
-        return avg_loss.item(), avg_count_loss, avg_attention_loss
+        avg_count_loss = np.mean(count_losses) if count_losses else 0.0
+        avg_attention_loss = np.mean(attention_losses) if attention_losses else 0.0
+
+        # Backward pass only if we have valid loss
+        if num_valid > 0 and not torch.isnan(avg_loss):
+            avg_loss.backward()
+
+        return avg_loss.item() if not torch.isnan(avg_loss) else 0.0, avg_count_loss, avg_attention_loss
 
 
 def custom_collate_fn(batch):

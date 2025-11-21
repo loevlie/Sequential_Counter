@@ -235,13 +235,17 @@ class GradCAMTrainer:
         Compute gradient-based attention using pixel_values gradients.
         Based on visualize_paper_figure.py approach.
         """
-        # Temporarily disable gradient checkpointing
+        # Save state
         was_training = self.model.training
+        old_use_cache = self.model.config.use_cache
+
+        # Set to eval mode
         self.model.eval()
 
-        # Disable gradient checkpointing for GradCAM
+        # CRITICAL: Disable both gradient checkpointing AND use_cache
         if hasattr(self.model, 'gradient_checkpointing_disable'):
             self.model.gradient_checkpointing_disable()
+        self.model.config.use_cache = False
 
         try:
             # Prepare input
@@ -338,7 +342,8 @@ class GradCAMTrainer:
             return np.zeros((224, 224))
 
         finally:
-            # Re-enable gradient checkpointing
+            # Restore state
+            self.model.config.use_cache = old_use_cache
             if was_training:
                 self.model.gradient_checkpointing_enable()
                 self.model.train()

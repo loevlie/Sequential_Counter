@@ -364,10 +364,8 @@ def train_epoch_with_gradcam(trainer: GradCAMTrainer,
                              gradient_accumulation_steps: int = 4,
                              max_grad_norm: float = 0.5,
                              epoch: int = 0,
-                             clear_cache_every: int = 10,
-                             track_samples: List = None,
-                             vis_dir: str = None) -> Dict:
-    """Training epoch with GradCAM tracking for selected samples"""
+                             clear_cache_every: int = 10) -> Dict:
+    """Training epoch (GradCAM tracking happens during validation)"""
     trainer.model.train()
 
     total_loss = 0
@@ -382,9 +380,6 @@ def train_epoch_with_gradcam(trainer: GradCAMTrainer,
     gc.collect()
     optimizer.zero_grad()
 
-    # Track which samples we've processed for GradCAM
-    processed_samples = set()
-
     for batch_idx, batch in enumerate(pbar):
         try:
             if batch_idx > 0 and batch_idx % clear_cache_every == 0:
@@ -395,37 +390,6 @@ def train_epoch_with_gradcam(trainer: GradCAMTrainer,
 
             image = batch['image'][0]
             count = batch['count'][0].item()
-            image_id = batch['image_id'][0]
-
-            # Check if this is a tracked sample
-            if track_samples and image_id in track_samples and image_id not in processed_samples:
-                # Compute and save GradCAM for this sample
-                with torch.no_grad():
-                    gradcam = trainer.compute_gradcam(image, target_size=224)
-
-                    # Get predicted count
-                    question = "Count the objects in this image. Respond with COUNT: followed by a number."
-                    messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
-                    text = trainer.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-                    inputs = trainer.processor(text=text, images=[image], return_tensors="pt")
-                    inputs = {k: v.to(trainer.device) for k, v in inputs.items()}
-
-                    generated_ids = trainer.model.generate(**inputs, max_new_tokens=10, do_sample=False)
-                    generated_text = trainer.processor.decode(generated_ids[0], skip_special_tokens=True)
-                    predicted_count = extract_count_from_text(generated_text)
-                    if predicted_count == -1:
-                        predicted_count = 0
-
-                # Get points for visualization
-                points = batch['points'][0] if 'points' in batch else np.array([])
-
-                # Save visualization
-                sample_dir = os.path.join(vis_dir, image_id.replace('.jpg', ''))
-                os.makedirs(sample_dir, exist_ok=True)
-                save_path = os.path.join(sample_dir, f'epoch_{epoch:03d}.png')
-
-                visualize_gradcam(image, gradcam, points, count, predicted_count, epoch+1, save_path)
-                processed_samples.add(image_id)
 
             # Standard training step
             inputs = trainer.prepare_inputs(image, count)
@@ -485,8 +449,7 @@ def train_epoch_with_gradcam(trainer: GradCAMTrainer,
                 pbar.set_postfix({
                     'loss': f'{avg_loss:.4f}',
                     'valid': num_valid_batches,
-                    'oom': num_oom_batches,
-                    'tracked': len(processed_samples)
+                    'oom': num_oom_batches
                 })
 
         except RuntimeError as e:
@@ -523,13 +486,15 @@ def train_epoch_with_gradcam(trainer: GradCAMTrainer,
     }
 
 
-def validate(trainer: GradCAMTrainer, dataloader: DataLoader) -> Dict:
-    """Validation"""
+def validate_with_gradcam(trainer: GradCAMTrainer, dataloader: DataLoader,
+                         track_samples: List = None, vis_dir: str = None, epoch: int = 0) -> Dict:
+    """Validation with GradCAM tracking for selected samples"""
     trainer.model.eval()
 
     total_mae = 0
     total_mse = 0
     num_samples = 0
+    num_tracked = 0
 
     torch.cuda.empty_cache()
     gc.collect()
@@ -542,7 +507,43 @@ def validate(trainer: GradCAMTrainer, dataloader: DataLoader) -> Dict:
 
                 image = batch['image'][0]
                 true_count = batch['count'][0].item()
+                image_id = batch['image_id'][0]
 
+                # Check if this is a tracked sample
+                if track_samples and image_id in track_samples and vis_dir:
+                    # Compute GradCAM for this sample
+                    gradcam = trainer.compute_gradcam(image, target_size=224)
+
+                    # Get predicted count
+                    question = "Count the objects in this image. Respond with COUNT: followed by a number."
+                    messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
+                    text = trainer.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+                    inputs = trainer.processor(text=text, images=[image], return_tensors="pt")
+                    inputs = {k: v.to(trainer.device) for k, v in inputs.items()}
+
+                    if "pixel_values" in inputs:
+                        inputs["pixel_values"] = inputs["pixel_values"].to(trainer.model_dtype)
+
+                    generated_ids = trainer.model.generate(**inputs, max_new_tokens=10, do_sample=False)
+                    generated_text = trainer.processor.decode(generated_ids[0], skip_special_tokens=True)
+                    predicted_count = extract_count_from_text(generated_text)
+                    if predicted_count == -1:
+                        predicted_count = 0
+
+                    # Get points for visualization
+                    points = batch['points'][0] if 'points' in batch else np.array([])
+
+                    # Save visualization
+                    sample_dir = os.path.join(vis_dir, image_id.replace('.jpg', ''))
+                    os.makedirs(sample_dir, exist_ok=True)
+                    save_path = os.path.join(sample_dir, f'epoch_{epoch:03d}.png')
+
+                    visualize_gradcam(image, gradcam, points, true_count, predicted_count, epoch+1, save_path)
+                    num_tracked += 1
+
+                    print(f"\nTracked sample: {image_id} (True: {true_count}, Pred: {predicted_count})")
+
+                # Standard validation
                 question = "Count the objects in this image. Respond with COUNT: followed by a number."
                 messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": question}]}]
 
@@ -575,6 +576,7 @@ def validate(trainer: GradCAMTrainer, dataloader: DataLoader) -> Dict:
                 else:
                     raise e
             except Exception as e:
+                print(f"Validation error: {e}")
                 continue
 
     torch.cuda.empty_cache()
@@ -583,7 +585,9 @@ def validate(trainer: GradCAMTrainer, dataloader: DataLoader) -> Dict:
     mae = total_mae / max(num_samples, 1)
     rmse = np.sqrt(total_mse / max(num_samples, 1))
 
-    return {'mae': mae, 'rmse': rmse, 'num_samples': num_samples}
+    print(f"\nTracked {num_tracked}/{len(track_samples) if track_samples else 0} samples this epoch")
+
+    return {'mae': mae, 'rmse': rmse, 'num_samples': num_samples, 'num_tracked': num_tracked}
 
 
 def main():
@@ -679,7 +683,7 @@ def main():
             print(f"Starting memory: {torch.cuda.memory_allocated()/1e9:.2f}GB")
         print(f"{'='*50}")
 
-        # Train with GradCAM tracking
+        # Train
         train_metrics = train_epoch_with_gradcam(
             trainer,
             train_loader,
@@ -688,18 +692,22 @@ def main():
             gradient_accumulation_steps=args.gradient_accumulation,
             max_grad_norm=args.max_grad_norm,
             epoch=epoch,
-            clear_cache_every=args.clear_cache_every,
-            track_samples=track_samples,
-            vis_dir=args.vis_dir
+            clear_cache_every=args.clear_cache_every
         )
 
         print(f"\nTrain Loss: {train_metrics['loss']:.4f} | "
               f"Valid Batches: {train_metrics['valid_batches']} | "
               f"OOM Batches: {train_metrics['oom_batches']}")
 
-        # Validate
-        val_metrics = validate(trainer, val_loader)
-        print(f"Validation MAE: {val_metrics['mae']:.2f} | RMSE: {val_metrics['rmse']:.2f}")
+        # Validate with GradCAM tracking
+        val_metrics = validate_with_gradcam(
+            trainer,
+            val_loader,
+            track_samples=track_samples,
+            vis_dir=args.vis_dir,
+            epoch=epoch
+        )
+        print(f"Validation MAE: {val_metrics['mae']:.2f} | RMSE: {val_metrics['rmse']:.2f} | Tracked: {val_metrics['num_tracked']}")
 
         # Log to wandb
         if args.use_wandb and WANDB_AVAILABLE:

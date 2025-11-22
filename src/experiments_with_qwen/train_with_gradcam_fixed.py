@@ -269,25 +269,20 @@ class GradCAMTrainer:
                 pixel_values.requires_grad_(True)
                 inputs["pixel_values"] = pixel_values
 
-                # Forward pass
-                outputs = self.model(**inputs, return_dict=True)
+                # CRITICAL: Enable gradients even in eval mode
+                with torch.set_grad_enabled(True):
+                    # Forward pass
+                    outputs = self.model(**inputs, return_dict=True)
 
-                # Compute target
-                if hasattr(outputs, "logits"):
-                    target = outputs.logits.mean()
-                else:
-                    target = outputs.last_hidden_state.mean() if hasattr(outputs, "last_hidden_state") else outputs[0].mean()
+                    # Compute target
+                    if hasattr(outputs, "logits"):
+                        target = outputs.logits.mean()
+                    else:
+                        target = outputs.last_hidden_state.mean() if hasattr(outputs, "last_hidden_state") else outputs[0].mean()
 
-                # Debug: Check if target has grad_fn
-                if not hasattr(target, 'grad_fn') or target.grad_fn is None:
-                    print(f"DEBUG: target has no grad_fn! target.requires_grad={target.requires_grad}")
-                    print(f"DEBUG: pixel_values.requires_grad={pixel_values.requires_grad}")
-                    print(f"DEBUG: target dtype={target.dtype}, device={target.device}")
-                    raise RuntimeError("Target has no grad_fn - cannot compute gradients")
-
-                # Zero grad AFTER forward, BEFORE backward (critical!)
-                self.model.zero_grad()
-                target.backward(retain_graph=True)
+                    # Zero grad AFTER forward, BEFORE backward (critical!)
+                    self.model.zero_grad()
+                    target.backward(retain_graph=True)
 
                 # Get gradients from pixel_values
                 grad = pixel_values.grad.data

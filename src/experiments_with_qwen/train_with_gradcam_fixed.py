@@ -159,8 +159,8 @@ class GradCAMTrainer:
 
         self.processor = AutoProcessor.from_pretrained(model_name)
 
-        # CRITICAL: Enable gradient checkpointing for training
-        self.model.gradient_checkpointing_enable()
+        # DON'T use gradient checkpointing - allows GradCAM to work
+        # (Since vision encoder is frozen, memory usage should be manageable)
 
         # Freeze vision encoder
         print("Freezing vision encoder (will remain frozen)")
@@ -237,16 +237,9 @@ class GradCAMTrainer:
         """
         # Save state
         was_training = self.model.training
-        old_use_cache = getattr(self.model.config, 'use_cache', None)
 
         # Set to eval mode
         self.model.eval()
-
-        # CRITICAL: Disable both gradient checkpointing AND use_cache
-        if hasattr(self.model, 'gradient_checkpointing_disable'):
-            self.model.gradient_checkpointing_disable()
-        if hasattr(self.model.config, 'use_cache'):
-            self.model.config.use_cache = False
 
         try:
             # Prepare input
@@ -344,11 +337,8 @@ class GradCAMTrainer:
             return np.zeros((224, 224))
 
         finally:
-            # Restore state
-            if old_use_cache is not None and hasattr(self.model.config, 'use_cache'):
-                self.model.config.use_cache = old_use_cache
+            # Restore training mode
             if was_training:
-                self.model.gradient_checkpointing_enable()
                 self.model.train()
 
 

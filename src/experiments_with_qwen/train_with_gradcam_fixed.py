@@ -277,15 +277,16 @@ class GradCAMTrainer:
                 inputs["pixel_values"] = pixel_values
 
                 # Forward pass
-                self.model.zero_grad()
                 outputs = self.model(**inputs, return_dict=True)
 
-                # Backward to get gradients
+                # Compute target
                 if hasattr(outputs, "logits"):
                     target = outputs.logits.mean()
                 else:
                     target = outputs.last_hidden_state.mean() if hasattr(outputs, "last_hidden_state") else outputs[0].mean()
 
+                # Zero grad AFTER forward, BEFORE backward (critical!)
+                self.model.zero_grad()
                 target.backward(retain_graph=True)
 
                 # Get gradients from pixel_values

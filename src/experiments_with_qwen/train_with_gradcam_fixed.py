@@ -306,7 +306,20 @@ class GradCAMTrainer:
                         # Pad to square
                         padded_side = int(np.ceil(np.sqrt(seq_len)))
                         padding = padded_side * padded_side - seq_len
-                        heatmap = F.pad(heatmap, (0, padding))
+                        heatmap = torch.nn.functional.pad(heatmap, (0, padding))
+                        heatmap = heatmap.reshape(padded_side, padded_side)
+                elif grad.dim() == 2:
+                    # [seq_len, hidden_dim] - no batch dimension
+                    heatmap = grad.abs().mean(dim=-1)  # Average over hidden_dim
+                    seq_len = heatmap.shape[0]
+                    side = int(np.sqrt(seq_len))
+                    if side * side == seq_len:
+                        heatmap = heatmap.reshape(side, side)
+                    else:
+                        # Pad to square
+                        padded_side = int(np.ceil(np.sqrt(seq_len)))
+                        padding = padded_side * padded_side - seq_len
+                        heatmap = torch.nn.functional.pad(heatmap, (0, padding))
                         heatmap = heatmap.reshape(padded_side, padded_side)
                 else:
                     print(f"Warning: Unexpected gradient shape {grad.shape}")

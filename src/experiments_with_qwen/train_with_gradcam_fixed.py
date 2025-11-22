@@ -237,7 +237,7 @@ class GradCAMTrainer:
         """
         # Save state
         was_training = self.model.training
-        old_use_cache = self.model.config.use_cache
+        old_use_cache = getattr(self.model.config, 'use_cache', None)
 
         # Set to eval mode
         self.model.eval()
@@ -245,7 +245,8 @@ class GradCAMTrainer:
         # CRITICAL: Disable both gradient checkpointing AND use_cache
         if hasattr(self.model, 'gradient_checkpointing_disable'):
             self.model.gradient_checkpointing_disable()
-        self.model.config.use_cache = False
+        if hasattr(self.model.config, 'use_cache'):
+            self.model.config.use_cache = False
 
         try:
             # Prepare input
@@ -343,7 +344,8 @@ class GradCAMTrainer:
 
         finally:
             # Restore state
-            self.model.config.use_cache = old_use_cache
+            if old_use_cache is not None and hasattr(self.model.config, 'use_cache'):
+                self.model.config.use_cache = old_use_cache
             if was_training:
                 self.model.gradient_checkpointing_enable()
                 self.model.train()
@@ -389,7 +391,7 @@ def create_gif_from_images(image_paths, output_path, duration=0.5):
 
 def train_epoch(trainer, dataloader, optimizer, scheduler=None,
                 gradient_accumulation_steps=4, max_grad_norm=0.5,
-                epoch=0, clear_cache_every=10):
+                epoch=0, clear_cache_every=10, max_batches=None):
     """Standard training epoch"""
     trainer.model.train()
 
@@ -398,13 +400,17 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
     num_oom_batches = 0
     accumulated_loss = 0
 
-    pbar = tqdm(dataloader, desc=f"Training Epoch {epoch+1}")
+    pbar = tqdm(dataloader, desc=f"Training Epoch {epoch+1}", total=max_batches if max_batches else len(dataloader))
 
     torch.cuda.empty_cache()
     gc.collect()
     optimizer.zero_grad()
 
     for batch_idx, batch in enumerate(pbar):
+        # Check if we've reached max batches limit
+        if max_batches is not None and batch_idx >= max_batches:
+            break
+
         try:
             if batch_idx > 0 and batch_idx % clear_cache_every == 0:
                 torch.cuda.empty_cache()
@@ -616,6 +622,8 @@ def main():
     parser.add_argument('--clear_cache_every', type=int, default=10)
     parser.add_argument('--num_track_samples', type=int, default=10)
     parser.add_argument('--gif_duration', type=float, default=0.5)
+    parser.add_argument('--max_train_batches', type=int, default=None,
+                        help='Max training batches per epoch (for testing, default: None = all batches)')
 
     args = parser.parse_args()
 
@@ -668,7 +676,8 @@ def main():
             gradient_accumulation_steps=args.gradient_accumulation,
             max_grad_norm=args.max_grad_norm,
             epoch=epoch,
-            clear_cache_every=args.clear_cache_every
+            clear_cache_every=args.clear_cache_every,
+            max_batches=args.max_train_batches
         )
 
         print(f"\nTrain Loss: {train_metrics['loss']:.4f} | Valid Batches: {train_metrics['valid_batches']} | OOM: {train_metrics['oom_batches']}")

@@ -176,6 +176,99 @@ class GradCAMTrainer:
 
         print(f"Model loaded successfully")
 
+    def compute_attention_map(self, image: Image.Image) -> torch.Tensor:
+        """
+        Compute gradient-based attention map as a torch tensor.
+        Used for computing attention loss during training.
+        """
+        # Prepare input
+        question = "Count the objects in this image. Respond with COUNT: followed by a number."
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": question}
+                ]
+            }
+        ]
+
+        text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+        inputs = self.processor(
+            text=[text],
+            images=[image],
+            return_tensors="pt"
+        )
+
+        inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+
+        # Clone and enable gradients on pixel_values
+        if "pixel_values" in inputs:
+            pixel_values = inputs["pixel_values"].clone().detach()
+            pixel_values.requires_grad_(True)
+            inputs["pixel_values"] = pixel_values
+
+            # Forward pass with gradients enabled
+            with torch.set_grad_enabled(True):
+                outputs = self.model(**inputs, return_dict=True)
+
+                # Compute target
+                if hasattr(outputs, "logits"):
+                    target = outputs.logits.mean()
+                else:
+                    target = outputs.last_hidden_state.mean() if hasattr(outputs, "last_hidden_state") else outputs[0].mean()
+
+                # Zero grad and backward
+                self.model.zero_grad()
+                target.backward(retain_graph=True)
+
+            # Get gradients from pixel_values
+            grad = pixel_values.grad
+
+            if grad is None:
+                return None
+
+            # Process gradients to create heatmap
+            if grad.dim() == 4:
+                # [batch, channels, height, width]
+                heatmap = grad.abs().mean(dim=[0, 1])
+            elif grad.dim() == 3:
+                # [batch, seq_len, hidden_dim]
+                heatmap = grad[0].abs().mean(dim=-1)
+                seq_len = heatmap.shape[0]
+                side = int(np.sqrt(seq_len))
+                if side * side == seq_len:
+                    heatmap = heatmap.reshape(side, side)
+                else:
+                    # Pad to square
+                    padded_side = int(np.ceil(np.sqrt(seq_len)))
+                    padding = padded_side * padded_side - seq_len
+                    heatmap = torch.nn.functional.pad(heatmap, (0, padding))
+                    heatmap = heatmap.reshape(padded_side, padded_side)
+            elif grad.dim() == 2:
+                # [seq_len, hidden_dim] - no batch dimension
+                heatmap = grad.abs().mean(dim=-1)
+                seq_len = heatmap.shape[0]
+                side = int(np.sqrt(seq_len))
+                if side * side == seq_len:
+                    heatmap = heatmap.reshape(side, side)
+                else:
+                    # Pad to square
+                    padded_side = int(np.ceil(np.sqrt(seq_len)))
+                    padding = padded_side * padded_side - seq_len
+                    heatmap = torch.nn.functional.pad(heatmap, (0, padding))
+                    heatmap = heatmap.reshape(padded_side, padded_side)
+            else:
+                return None
+
+            # Normalize
+            if heatmap.max() > heatmap.min():
+                heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
+
+            return heatmap
+
+        return None
+
     def prepare_inputs(self, image: Image.Image, count: int):
         """Prepare inputs with proper label masking"""
         question = "Count the objects in this image. Respond with COUNT: followed by a number."
@@ -403,11 +496,12 @@ def create_gif_from_images(image_paths, output_path, duration=0.5):
 
 def train_epoch(trainer, dataloader, optimizer, scheduler=None,
                 gradient_accumulation_steps=4, max_grad_norm=0.5,
-                epoch=0, clear_cache_every=10, max_batches=None):
-    """Standard training epoch"""
+                epoch=0, clear_cache_every=10, max_batches=None, attention_weight=0.0):
+    """Standard training epoch with optional attention loss"""
     trainer.model.train()
 
     total_loss = 0
+    total_attn_loss = 0
     num_valid_batches = 0
     num_oom_batches = 0
     accumulated_loss = 0
@@ -432,6 +526,7 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
 
             image = batch['image'][0]
             count = batch['count'][0].item()
+            target_heatmap = batch['target_heatmap'][0].to(trainer.device)
 
             inputs = trainer.prepare_inputs(image, count)
 
@@ -447,6 +542,27 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
             else:
                 continue
 
+            # Add attention regularization loss
+            attn_loss = 0.0
+            if attention_weight > 0:
+                try:
+                    attention_map = trainer.compute_attention_map(image)
+                    if attention_map is not None:
+                        # Resize target heatmap to match attention map size
+                        target_resized = torch.nn.functional.interpolate(
+                            target_heatmap.unsqueeze(0).unsqueeze(0),
+                            size=attention_map.shape,
+                            mode='bilinear',
+                            align_corners=False
+                        ).squeeze()
+
+                        # MSE loss between attention map and target
+                        attn_loss = torch.nn.functional.mse_loss(attention_map, target_resized)
+                        loss = loss + attention_weight * attn_loss
+                except Exception as e:
+                    # If attention loss fails, just continue with counting loss
+                    pass
+
             if torch.isnan(loss) or torch.isinf(loss):
                 optimizer.zero_grad()
                 torch.cuda.empty_cache()
@@ -454,6 +570,8 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
 
             loss = loss / gradient_accumulation_steps
             accumulated_loss += loss.item()
+            if isinstance(attn_loss, torch.Tensor):
+                total_attn_loss += attn_loss.item()
             loss.backward()
 
             del outputs, loss, inputs
@@ -482,11 +600,15 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
 
             if num_valid_batches > 0:
                 avg_loss = total_loss / num_valid_batches
-                pbar.set_postfix({
+                avg_attn_loss = total_attn_loss / num_valid_batches if num_valid_batches > 0 else 0
+                postfix = {
                     'loss': f'{avg_loss:.4f}',
                     'valid': num_valid_batches,
                     'oom': num_oom_batches
-                })
+                }
+                if attention_weight > 0:
+                    postfix['attn_l'] = f'{avg_attn_loss:.4f}'
+                pbar.set_postfix(postfix)
 
         except RuntimeError as e:
             if "out of memory" in str(e).lower():
@@ -510,6 +632,7 @@ def train_epoch(trainer, dataloader, optimizer, scheduler=None,
 
     return {
         'loss': total_loss / max(num_valid_batches, 1),
+        'attn_loss': total_attn_loss / max(num_valid_batches, 1),
         'oom_batches': num_oom_batches,
         'valid_batches': num_valid_batches
     }
@@ -636,6 +759,8 @@ def main():
     parser.add_argument('--gif_duration', type=float, default=0.5)
     parser.add_argument('--max_train_batches', type=int, default=None,
                         help='Max training batches per epoch (for testing, default: None = all batches)')
+    parser.add_argument('--attention_weight', type=float, default=0.0,
+                        help='Weight for attention regularization loss (default: 0.0 = disabled)')
 
     args = parser.parse_args()
 
@@ -689,10 +814,15 @@ def main():
             max_grad_norm=args.max_grad_norm,
             epoch=epoch,
             clear_cache_every=args.clear_cache_every,
-            max_batches=args.max_train_batches
+            max_batches=args.max_train_batches,
+            attention_weight=args.attention_weight
         )
 
-        print(f"\nTrain Loss: {train_metrics['loss']:.4f} | Valid Batches: {train_metrics['valid_batches']} | OOM: {train_metrics['oom_batches']}")
+        loss_str = f"\nTrain Loss: {train_metrics['loss']:.4f}"
+        if args.attention_weight > 0:
+            loss_str += f" | Attn Loss: {train_metrics['attn_loss']:.4f}"
+        loss_str += f" | Valid Batches: {train_metrics['valid_batches']} | OOM: {train_metrics['oom_batches']}"
+        print(loss_str)
 
         val_metrics = validate_with_gradcam(trainer, val_loader, track_samples=track_samples, vis_dir=args.vis_dir, epoch=epoch)
         print(f"Validation MAE: {val_metrics['mae']:.2f} | RMSE: {val_metrics['rmse']:.2f} | Tracked: {val_metrics['num_tracked']}")

@@ -345,6 +345,8 @@ class GradCAMTrainer:
 
         except Exception as e:
             print(f"GradCAM error: {e}")
+            import traceback
+            traceback.print_exc()
             return np.zeros((224, 224))
 
         finally:

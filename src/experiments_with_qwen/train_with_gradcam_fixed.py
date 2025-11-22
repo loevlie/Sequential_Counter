@@ -278,12 +278,23 @@ class GradCAMTrainer:
                 else:
                     target = outputs.last_hidden_state.mean() if hasattr(outputs, "last_hidden_state") else outputs[0].mean()
 
+                # Debug: Check if target has grad_fn
+                if not hasattr(target, 'grad_fn') or target.grad_fn is None:
+                    print(f"DEBUG: target has no grad_fn! target.requires_grad={target.requires_grad}")
+                    print(f"DEBUG: pixel_values.requires_grad={pixel_values.requires_grad}")
+                    print(f"DEBUG: target dtype={target.dtype}, device={target.device}")
+                    raise RuntimeError("Target has no grad_fn - cannot compute gradients")
+
                 # Zero grad AFTER forward, BEFORE backward (critical!)
                 self.model.zero_grad()
                 target.backward(retain_graph=True)
 
                 # Get gradients from pixel_values
                 grad = pixel_values.grad.data
+
+                if grad is None:
+                    print("DEBUG: pixel_values.grad is None after backward!")
+                    raise RuntimeError("No gradients computed on pixel_values")
 
                 # Process gradients to create heatmap (from visualize_paper_figure.py)
                 if grad.dim() == 4:
